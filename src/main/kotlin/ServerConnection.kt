@@ -1,12 +1,16 @@
 import org.slf4j.LoggerFactory
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.lang.IllegalStateException
 import java.lang.invoke.MethodHandles
 import java.net.Socket
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
 
-class ServerConnection(host: String, port: Int) : AutoCloseable {
+class ServerConnection(socket: Socket) : AutoCloseable {
+    constructor(host: String, port: Int) : this(Socket(host, port))
+
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         private val PREFIX = byteArrayOf('Q'.toByte(), 'B'.toByte(), 'U'.toByte(), 'S'.toByte(), 0, 0, 0, 0, 0)
@@ -17,14 +21,9 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
     }
 
-    private val clientSocket: Socket = Socket(host, port)
-    private val out: BufferedOutputStream
-    private val inStream: BufferedInputStream
-
-    init {
-        out = BufferedOutputStream(clientSocket.getOutputStream())
-        inStream = BufferedInputStream(clientSocket.getInputStream())
-    }
+    private val clientSocket = socket
+    private val out: BufferedOutputStream = BufferedOutputStream(clientSocket.getOutputStream())
+    private val inStream: BufferedInputStream = BufferedInputStream(clientSocket.getInputStream())
 
     /*fun sendMessage(msg: String?): String {
         out!!.println(msg)
@@ -39,6 +38,10 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
 
     fun readData() {
         val buf = ByteArray(256)
+        if (inStream.available() == 0) {
+            LOG.warn("No data available to read")
+            return
+        }
         val size = inStream.read(buf)
         if (size == -1) {
             LOG.warn("No data to read")
@@ -48,16 +51,16 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
         }
     }
 
-    fun writeMsgVersion() {
-        val cmd: Byte = 0x07
-        val data: Byte = 0x04
+    fun formatMsgAndSend(data: ByteArray, login: Boolean = false) {
+        val cmdArray = ByteArray(data.size + 4)
 
         //first 3 bytes are to be filled in later
-        val cmdArray = byteArrayOf(0, 0, 0, START_BYTE, cmd, 0, 0, data, STOP_BYTE)
-        cmdArray[0] = BYTE_MSG //if login, use 0xFA
-        val size = cmdArray.size - 4 //don't count first 3 bytes and stop_byte for the size
-        cmdArray[2] = (size and 0x000000FF).toByte()
-        cmdArray[1] = ((size shr 8) and 0x000000FF).toByte()
+        //val cmdArray = byteArrayOf(0, 0, 0, START_BYTE, cmd, 0, 0, data, STOP_BYTE)
+        cmdArray[0] = if (login) BYTE_LOGIN else BYTE_MSG
+        cmdArray[2] = (data.size and 0x000000FF).toByte()
+        cmdArray[1] = ((data.size shr 8) and 0x000000FF).toByte()
+        cmdArray[cmdArray.size - 1] = STOP_BYTE
+        data.copyInto(cmdArray, 3)
         LOG.info("s1: {}, s2: {}", cmdArray[1], cmdArray[2])
 
         LOG.info("Sending: {}{}", bytesToHex(PREFIX), bytesToHex(cmdArray))
@@ -66,8 +69,52 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
         out.flush()
     }
 
+    fun writeMsgVersion() {
+        val cmd: Byte = 0x07
+        val data: Byte = 0x04
+
+        val cmdArray = byteArrayOf(START_BYTE, cmd, 0, 0, data)
+        formatMsgAndSend(cmdArray)
+    }
+
+    fun writeControllerOptions() {
+        val cmd: Byte = 0x0D
+        val i1: Byte = 0x0D
+        val data: Byte = 0x07
+
+        val cmdArray = byteArrayOf(START_BYTE, cmd, i1, 0, data)
+        formatMsgAndSend(cmdArray)
+    }
+
+    fun login(username: String, password: String) {
+        val cmdArray = ByteArray(34)
+        cmdArray[0] = START_BYTE
+        cmdArray[1] = 0x00
+        val cs = Charset.forName("windows-1252")
+
+        val user2 = username.substring(0, minOf(16, username.length))
+        val pass2 = password.substring(0, minOf(16, password.length))
+        user2.toByteArray(cs).copyInto(cmdArray, 2)
+        pass2.toByteArray(cs).copyInto(cmdArray, 2 + 16)
+        formatMsgAndSend(cmdArray, login = true)
+        //cmdArray[cmdArray.size - 1] = STOP_BYTE
+    }
+
     fun parse(msg: ByteArray) {
         LOG.info("Parsing")
+
+        msg.indexOf(STOP_BYTE)
+            .takeIf { pos -> pos != -1 }
+            ?.let { pos ->
+                parseSingle(msg.copyOfRange(0, pos + 1))
+                if (msg.size > pos + 1) {
+                    parse(msg.copyOfRange(pos + 1, msg.size))
+                }
+            }
+    }
+
+    private fun parseSingle(msg: ByteArray) {
+        LOG.info("Parsing single")
         if (msg.size < PREFIX.size) {
             LOG.warn("Msg too short, can't parse: {} -- {}", msg.size, bytesToHex(msg))
             return
@@ -82,8 +129,8 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
             return
         }
         when (dataArray[0]) {
-            BYTE_MSG -> parseMsg(dataArray)
-            BYTE_LOGIN -> LOG.warn("Login msg parsing not yet supported")
+            BYTE_MSG -> parseMsg(dataArray, login = false)
+            BYTE_LOGIN -> parseMsg(dataArray, login = true)
             else -> LOG.warn("Unknown msg byte type: {}", bytesToHex(dataArray))
         }
     }
@@ -96,7 +143,7 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
         return ((msg[1].toInt() and 0xFF) shl 8) + (msg[2].toInt() and 0xFF)
     }
 
-    fun parseMsg(msg: ByteArray) {
+    private fun parseMsg(msg: ByteArray, login: Boolean) {
         getSize(msg)?.let { size ->
             if (msg.size - 3 != size) {
                 LOG.warn("Corrupted msg, size mismatch: {} != {} -- {}", msg.size - 3, size, bytesToHex(msg))
@@ -106,18 +153,50 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
                 LOG.warn("Corrupted msg, last byte is not stop-byte -- {}", bytesToHex(msg))
                 return
             }
-            parseData(msg.copyOfRange(3, msg.size))
+            parseData(msg.copyOfRange(3, msg.size), login)
         }
     }
 
-    fun parseData(cmdArray: ByteArray) {
+    private fun parseData(cmdArray: ByteArray, login: Boolean) {
         if (cmdArray[0] != START_BYTE) {
             LOG.warn("Corrupted start byte -- {}", bytesToHex(cmdArray))
             return
         }
-        when (cmdArray[1]) {
-            0x07.toByte() -> parseVersionData(cmdArray)
-            else -> LOG.warn("unknown msg type -- {}", bytesToHex(cmdArray))
+        val type = cmdArray[1]
+        if (login) {
+            when (type) {
+                0x00.toByte() -> parseVerifyPassword(cmdArray)
+                0x02.toByte() -> parseStringData(cmdArray)
+                else -> LOG.warn("unknown login msg type 0x{} -- {}", byteToHex(type), bytesToHex(cmdArray))
+            }
+        } else {
+            when (type) {
+                0x07.toByte() -> parseVersionData(cmdArray)
+                0x0D.toByte() -> parseControllerOptions(cmdArray)
+                0x38.toByte() -> parseAddressStatus(cmdArray)
+                0x35.toByte() -> parseEvent(cmdArray)
+                else -> LOG.warn("unknown msg type 0x{} -- {}", byteToHex(type), bytesToHex(cmdArray))
+            }
+        }
+    }
+
+    private fun parseControllerOptions(cmdArray: ByteArray) {
+        LOG.info("Controller options data")
+    }
+
+    private fun parseStringData(cmdArray: ByteArray) {
+        LOG.info("STR: {}", String(cmdArray.copyOfRange(2, cmdArray.size - 1), StandardCharsets.UTF_8))
+    }
+
+    private fun parseVerifyPassword(cmdArray: ByteArray) {
+        if (cmdArray.size < 3) {
+            LOG.warn("Password verify data to short to parse -- ", bytesToHex(cmdArray))
+            return
+        }
+        if (cmdArray[2] == 0x00.toByte()) {
+            LOG.info("Login OK")
+        } else {
+            throw IllegalStateException("Login failed")
         }
     }
 
@@ -132,7 +211,32 @@ class ServerConnection(host: String, port: Int) : AutoCloseable {
         LOG.info("Version: {}.{}", format.format(cmdArray[12]), format.format(cmdArray[13]))
     }
 
-    fun bytesToHex(bytes: ByteArray): String {
+    private fun parseAddressStatus(cmdArray: ByteArray) {
+        LOG.info("Address status! -- {}", bytesToHex(cmdArray))
+        val address = cmdArray[2]
+        val subAddress = cmdArray[3] //0xFF = all
+        if (cmdArray[5] != 0x00.toByte()) {
+            LOG.warn("Invalid AddressStatus message");
+            return
+        }
+        val size =cmdArray[6]
+        val data = cmdArray.copyOfRange(7, 7+size)
+
+        LOG.info("Data: Address: 0x{}0x{}-- {}", byteToHex(address), byteToHex(subAddress), bytesToHex(data))
+    }
+
+    private fun parseEvent(cmdArray: ByteArray) {
+        val address = cmdArray[2]
+        val data = cmdArray.copyOfRange(3, 3+4)
+
+        LOG.info("Event: Address: 0x{}-- {}", byteToHex(address), bytesToHex(data))
+    }
+
+    private fun byteToHex(byte: Byte): String {
+        return bytesToHex(byteArrayOf(byte))
+    }
+
+    private fun bytesToHex(bytes: ByteArray): String {
         val hexChars = CharArray(bytes.size * 3)
         for (j in bytes.indices) {
             val v: Int = bytes[j].toInt() and 0xFF
