@@ -43,8 +43,14 @@ class Main {
                 conn.writeControllerOptions()
                 Thread.sleep(1000)
                 conn.readData()
+
+                Thread.sleep(1000)
+                conn.writegetFATData()
                 Thread.sleep(1000)
                 conn.readData()
+
+                Thread.sleep(1000)
+                conn.writegetSDData()
                 Thread.sleep(1000)
                 conn.readData()
                 Thread.sleep(1000)

@@ -90,6 +90,36 @@ class SendingTest : StringSpec() {
                 0x00u, 0x23u
             ).toByteArray()
         }
+        "Sending FAT data" {
+            sc.writegetFATData()
+            verify(outputStream).flush()
+            data.size shouldBe 1
+            data[0] shouldBe ubyteArrayOf(
+                0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
+                0x00u, 0xffu, 0x00u, 0x05u, 0x2au, 0x09u, 0x00u, 0x00u,
+                0x00u, 0x23u
+            ).toByteArray()
+        }
+        "Sending get SD header" {
+            sc.writegetSDData()
+            verify(outputStream).flush()
+            data.size shouldBe 1
+            data[0] shouldBe ubyteArrayOf(
+                0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
+                0x00u, 0xffu, 0x00u, 0x05u, 0x2au, 0x44u, 0x29u, 0xffu,
+                0xefu, 0x23u
+            ).toByteArray()
+        }
+        "Sending get SD part1" {
+            sc.writegetSDData(1)
+            verify(outputStream).flush()
+            data.size shouldBe 1
+            data[0] shouldBe ubyteArrayOf(
+                0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
+                0x00u, 0xffu, 0x00u, 0x05u, 0x2au, 0x44u, 0x29u, 0xfeu,
+                0xefu, 0x23u
+            ).toByteArray()
+        }
     }
 }
 

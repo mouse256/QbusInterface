@@ -1,7 +1,6 @@
 import org.slf4j.LoggerFactory
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
-import java.lang.IllegalStateException
 import java.lang.invoke.MethodHandles
 import java.net.Socket
 import java.nio.charset.Charset
@@ -37,7 +36,7 @@ class ServerConnection(socket: Socket) : AutoCloseable {
     }
 
     fun readData() {
-        val buf = ByteArray(256)
+        val buf = ByteArray(2048)
         if (inStream.available() == 0) {
             LOG.warn("No data available to read")
             return
@@ -83,6 +82,29 @@ class ServerConnection(socket: Socket) : AutoCloseable {
         val data: Byte = 0x07
 
         val cmdArray = byteArrayOf(START_BYTE, cmd, i1, 0, data)
+        formatMsgAndSend(cmdArray)
+    }
+
+    fun writegetSDData(part: Int = 0) {
+        val cmd: Byte = 0x44
+        val i1: Byte = 0x29
+        var i2: Byte = 0xFF.toByte()
+        for (i in 1..part) {
+            i2 = i2.dec()
+        }
+        val data: Byte = 0xEF.toByte()
+
+        val cmdArray = byteArrayOf(START_BYTE, cmd, i1, i2, data)
+        formatMsgAndSend(cmdArray)
+    }
+
+    fun writegetFATData() {
+        val cmd: Byte = 0x09
+        val i1: Byte = 0x00
+        val i2: Byte = 0x00
+        val data: Byte = 0x00.toByte()
+
+        val cmdArray = byteArrayOf(START_BYTE, cmd, i1, i2, data)
         formatMsgAndSend(cmdArray)
     }
 
@@ -175,6 +197,8 @@ class ServerConnection(socket: Socket) : AutoCloseable {
                 0x0D.toByte() -> parseControllerOptions(cmdArray)
                 0x38.toByte() -> parseAddressStatus(cmdArray)
                 0x35.toByte() -> parseEvent(cmdArray)
+                0x09.toByte() -> parseFatData(cmdArray)
+                0x44.toByte() -> parseSDdata(cmdArray)
                 else -> LOG.warn("unknown msg type 0x{} -- {}", byteToHex(type), bytesToHex(cmdArray))
             }
         }
@@ -219,18 +243,47 @@ class ServerConnection(socket: Socket) : AutoCloseable {
             LOG.warn("Invalid AddressStatus message");
             return
         }
-        val size =cmdArray[6]
-        val data = cmdArray.copyOfRange(7, 7+size)
+        val size = cmdArray[6]
+        val data = cmdArray.copyOfRange(7, 7 + size)
 
         LOG.info("Data: Address: 0x{}0x{}-- {}", byteToHex(address), byteToHex(subAddress), bytesToHex(data))
     }
 
     private fun parseEvent(cmdArray: ByteArray) {
         val address = cmdArray[2]
-        val data = cmdArray.copyOfRange(3, 3+4)
+        val data = cmdArray.copyOfRange(3, 3 + 4)
 
         LOG.info("Event: Address: 0x{}-- {}", byteToHex(address), bytesToHex(data))
     }
+
+    private fun parseFatData(cmdArray: ByteArray) {
+        val i1 = cmdArray[2]
+        val i2 = cmdArray[3]
+        val length = cmdArray[4]
+        if (cmdArray[5] != 0x00.toByte()) {
+            LOG.error("Got error in FAT data")
+            return
+        }
+
+        LOG.info("FAT data: i1: 0x{}, i2:0x{}, length:{}", byteToHex(i1), byteToHex(i2), length)
+    }
+
+    private fun parseSDdata(cmdArray: ByteArray) {
+        val i1 = cmdArray[2]
+        val i2 = cmdArray[3]
+        val num = cmdArray[4]
+        var index = 4
+        if (cmdArray[5] == 0x00.toByte() && cmdArray[6] == num) {
+            index = 6
+        }
+        val data = cmdArray.copyOfRange(index + 1, cmdArray.size - 1)
+
+        LOG.info(
+            "SD: i1: 0x{}i2: 0x{}num: 0x{}size:{} index: {}",
+            byteToHex(i1), byteToHex(i2), byteToHex(num), cmdArray.size, index
+        )
+    }
+
 
     private fun byteToHex(byte: Byte): String {
         return bytesToHex(byteArrayOf(byte))
