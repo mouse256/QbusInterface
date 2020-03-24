@@ -122,17 +122,49 @@ class ServerConnection(socket: Socket) : AutoCloseable {
         //cmdArray[cmdArray.size - 1] = STOP_BYTE
     }
 
+    private fun getEndPosition(msg: ByteArray, num: Int): Int {
+        var found = 0;
+        for (i in 0..msg.size) {
+            if (msg[i] == STOP_BYTE) {
+                if (found == num) {
+                    return i
+                }
+                found++
+            }
+        }
+        return -1
+    }
+
     fun parse(msg: ByteArray) {
         LOG.info("Parsing")
 
-        msg.indexOf(STOP_BYTE)
-            .takeIf { pos -> pos != -1 }
-            ?.let { pos ->
+        for (i in 0..10) {
+            val pos = getEndPosition(msg, i)
+            if (pos == -1) {
+                LOG.warn("No endbyte found in {}", bytesToHex(msg))
+                return
+            }
+
+            //LOG.info("({}) Pos:{} size: {}", i, pos, msg.size)
+            if (pos + 1 == msg.size) {
+                //end and end-of-stream
                 parseSingle(msg.copyOfRange(0, pos + 1))
-                if (msg.size > pos + 1) {
+                return
+            }
+
+            if (msg.size > pos + 10) {
+                if (msg.copyOfRange(pos + 1, pos + 1 + PREFIX.size).contentEquals(PREFIX)) {
+                    //2 or more messages in the same buffer
+                    //parsing first
+                    parseSingle(msg.copyOfRange(0, pos + 1))
+
+                    //and looping for the next one
                     parse(msg.copyOfRange(pos + 1, msg.size))
+                    return
                 }
             }
+            //if nothing matches, search for the next occurence of the stopbyte
+        }
     }
 
     private fun parseSingle(msg: ByteArray) {
@@ -281,6 +313,34 @@ class ServerConnection(socket: Socket) : AutoCloseable {
         LOG.info(
             "SD: i1: 0x{}i2: 0x{}num: 0x{}size:{} index: {}",
             byteToHex(i1), byteToHex(i2), byteToHex(num), cmdArray.size, index
+        )
+        if (i2 == 0xFF.toByte()) {
+            parseSDheader(data)
+        }
+    }
+
+    private fun parseSDheader(cmdArray: ByteArray) {
+        val cs = Charset.forName("windows-1252")
+        val header = cmdArray.toString(cs).split("|")
+        header.forEach { h ->
+            LOG.info("H: {}", h)
+        }
+        if (header.size < 5) {
+            LOG.warn("SD header too short")
+            return
+        }
+        if (header[0] != "JSONDB") {
+            LOG.warn("Corrupt SD header. Expected JSONDB, got {}", header[0])
+            return
+        }
+        val totalSize = Integer.parseInt(header[1])
+        val blockSize = Integer.parseInt(header[2])
+        val dateTime = header[3]
+        val fileName = header[4]
+        val version = header[5]
+        LOG.info(
+            "SD header: size: {}, blocksize: {} time: {}, name: {}, version: {}",
+            totalSize, blockSize, dateTime, fileName, version
         )
     }
 
