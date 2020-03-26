@@ -1,11 +1,10 @@
-import io.kotlintest.matchers.startWith
-import io.kotlintest.should
 import io.kotlintest.specs.StringSpec
 import java.net.Socket
 import com.nhaarman.mockitokotlin2.*
 import io.kotlintest.TestCase
 import io.kotlintest.shouldBe
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.muizenhol.qbus.ServerConnection
+import org.muizenhol.qbus.datatype.DataType
 import org.slf4j.LoggerFactory
 import java.io.OutputStream
 import java.lang.invoke.MethodHandles
@@ -19,6 +18,12 @@ class SendingTest : StringSpec() {
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
+    }
+
+    class MyListener: ServerConnection.Listener {
+        override fun onEvent(event: DataType) {
+            //ILB
+        }
     }
 
     override fun beforeTest(testCase: TestCase) {
@@ -41,7 +46,7 @@ class SendingTest : StringSpec() {
         val socket = mock<Socket> {
             on { getOutputStream() } doReturn outputStream
         }
-        sc = ServerConnection(socket)
+        sc = ServerConnection(socket, MyListener())
     }
 
     private fun bytesToHex(bytes: ByteArray): String {

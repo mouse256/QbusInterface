@@ -1,3 +1,8 @@
+package org.muizenhol.qbus
+
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import org.muizenhol.qbus.datatype.*
 import org.slf4j.LoggerFactory
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -7,8 +12,12 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 
 
-class ServerConnection(socket: Socket) : AutoCloseable {
-    constructor(host: String, port: Int) : this(Socket(host, port))
+class ServerConnection(socket: Socket, private val listener: Listener) : AutoCloseable {
+    constructor(host: String, port: Int, listener: Listener) : this(Socket(host, port), listener)
+
+    interface Listener {
+        fun onEvent(event: DataType)
+    }
 
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
@@ -24,29 +33,35 @@ class ServerConnection(socket: Socket) : AutoCloseable {
     private val out: BufferedOutputStream = BufferedOutputStream(clientSocket.getOutputStream())
     private val inStream: BufferedInputStream = BufferedInputStream(clientSocket.getInputStream())
 
-    /*fun sendMessage(msg: String?): String {
-        out!!.println(msg)
-        return `in`!!.readLine()
-    }*/
-
     fun readWelcome() {
         val buf = ByteArray(256)
         val size = inStream.read(buf)
         LOG.info("Welcome: {}", String(buf.copyOfRange(0, size), StandardCharsets.UTF_8))
     }
 
-    fun readData() {
-        val buf = ByteArray(2048)
-        if (inStream.available() == 0) {
-            LOG.warn("No data available to read")
-            return
+    fun startDataReader() {
+        LOG.info("Starting datareader")
+        GlobalScope.launch {
+            var running = true
+            while (running) {
+                if (!readData()) {
+                    LOG.warn("Stream closed!")
+                    running = false
+                }
+            }
         }
+    }
+
+    fun readData(): Boolean {
+        val buf = ByteArray(2048)
         val size = inStream.read(buf)
         if (size == -1) {
             LOG.warn("No data to read")
+            return false
         } else {
             //LOG.info("IN: {}", bytesToHex(buf.copyOfRange(0, size)))
             parse(buf.copyOfRange(0, size))
+            return true
         }
     }
 
@@ -62,7 +77,11 @@ class ServerConnection(socket: Socket) : AutoCloseable {
         data.copyInto(cmdArray, 3)
         LOG.info("s1: {}, s2: {}", cmdArray[1], cmdArray[2])
 
-        LOG.info("Sending: {}{}", bytesToHex(PREFIX), bytesToHex(cmdArray))
+        LOG.info(
+            "Sending: {}{}", Common.bytesToHex(
+                PREFIX
+            ), Common.bytesToHex(cmdArray)
+        )
         out.write(PREFIX)
         out.write(cmdArray)
         out.flush()
@@ -141,7 +160,7 @@ class ServerConnection(socket: Socket) : AutoCloseable {
         for (i in 0..10) {
             val pos = getEndPosition(msg, i)
             if (pos == -1) {
-                LOG.warn("No endbyte found in {}", bytesToHex(msg))
+                LOG.warn("No endbyte found in {}", Common.bytesToHex(msg))
                 return
             }
 
@@ -153,7 +172,10 @@ class ServerConnection(socket: Socket) : AutoCloseable {
             }
 
             if (msg.size > pos + 10) {
-                if (msg.copyOfRange(pos + 1, pos + 1 + PREFIX.size).contentEquals(PREFIX)) {
+                if (msg.copyOfRange(pos + 1, pos + 1 + PREFIX.size).contentEquals(
+                        PREFIX
+                    )
+                ) {
                     //2 or more messages in the same buffer
                     //parsing first
                     parseSingle(msg.copyOfRange(0, pos + 1))
@@ -170,22 +192,25 @@ class ServerConnection(socket: Socket) : AutoCloseable {
     private fun parseSingle(msg: ByteArray) {
         LOG.info("Parsing single")
         if (msg.size < PREFIX.size) {
-            LOG.warn("Msg too short, can't parse: {} -- {}", msg.size, bytesToHex(msg))
+            LOG.warn("Msg too short, can't parse: {} -- {}", msg.size, Common.bytesToHex(msg))
             return
         }
-        if (!msg.copyOfRange(0, PREFIX.size).contentEquals(PREFIX)) {
-            LOG.warn("Invalid prefix for msg: {}", bytesToHex(msg))
+        if (!msg.copyOfRange(0, PREFIX.size).contentEquals(
+                PREFIX
+            )
+        ) {
+            LOG.warn("Invalid prefix for msg: {}", Common.bytesToHex(msg))
             return
         }
         val dataArray = msg.copyOfRange(PREFIX.size, msg.size)
         if (dataArray.size < 4) {
-            LOG.warn("cmdArray too small: {}", bytesToHex(msg))
+            LOG.warn("cmdArray too small: {}", Common.bytesToHex(msg))
             return
         }
         when (dataArray[0]) {
             BYTE_MSG -> parseMsg(dataArray, login = false)
             BYTE_LOGIN -> parseMsg(dataArray, login = true)
-            else -> LOG.warn("Unknown msg byte type: {}", bytesToHex(dataArray))
+            else -> LOG.warn("Unknown msg byte type: {}", Common.bytesToHex(dataArray))
         }
     }
 
@@ -200,11 +225,11 @@ class ServerConnection(socket: Socket) : AutoCloseable {
     private fun parseMsg(msg: ByteArray, login: Boolean) {
         getSize(msg)?.let { size ->
             if (msg.size - 3 != size) {
-                LOG.warn("Corrupted msg, size mismatch: {} != {} -- {}", msg.size - 3, size, bytesToHex(msg))
+                LOG.warn("Corrupted msg, size mismatch: {} != {} -- {}", msg.size - 3, size, Common.bytesToHex(msg))
                 return
             }
             if (msg[msg.size - 1] != STOP_BYTE) {
-                LOG.warn("Corrupted msg, last byte is not stop-byte -- {}", bytesToHex(msg))
+                LOG.warn("Corrupted msg, last byte is not stop-byte -- {}", Common.bytesToHex(msg))
                 return
             }
             parseData(msg.copyOfRange(3, msg.size), login)
@@ -213,151 +238,36 @@ class ServerConnection(socket: Socket) : AutoCloseable {
 
     private fun parseData(cmdArray: ByteArray, login: Boolean) {
         if (cmdArray[0] != START_BYTE) {
-            LOG.warn("Corrupted start byte -- {}", bytesToHex(cmdArray))
+            LOG.warn("Corrupted start byte -- {}", Common.bytesToHex(cmdArray))
             return
         }
         val type = cmdArray[1]
+        var dataType: DataType? = null
         if (login) {
             when (type) {
-                0x00.toByte() -> parseVerifyPassword(cmdArray)
-                0x02.toByte() -> parseStringData(cmdArray)
-                else -> LOG.warn("unknown login msg type 0x{} -- {}", byteToHex(type), bytesToHex(cmdArray))
+                0x00.toByte() -> dataType = PasswordVerify()
+                0x02.toByte() -> dataType = StringData()
+                else -> LOG.warn(
+                    "unknown login msg type 0x{} -- {}",
+                    Common.byteToHex(type),
+                    Common.bytesToHex(cmdArray)
+                )
             }
         } else {
             when (type) {
-                0x07.toByte() -> parseVersionData(cmdArray)
-                0x0D.toByte() -> parseControllerOptions(cmdArray)
-                0x38.toByte() -> parseAddressStatus(cmdArray)
-                0x35.toByte() -> parseEvent(cmdArray)
-                0x09.toByte() -> parseFatData(cmdArray)
-                0x44.toByte() -> parseSDdata(cmdArray)
-                else -> LOG.warn("unknown msg type 0x{} -- {}", byteToHex(type), bytesToHex(cmdArray))
+                0x07.toByte() -> dataType = Version()
+                0x0D.toByte() -> dataType = ControllerOptions()
+                0x38.toByte() -> dataType = AddressStatus()
+                0x35.toByte() -> dataType = Event()
+                0x09.toByte() -> dataType = FatData()
+                0x44.toByte() -> dataType = SDData()
+                else -> LOG.warn("unknown msg type 0x{} -- {}", Common.byteToHex(type), Common.bytesToHex(cmdArray))
             }
         }
-    }
-
-    private fun parseControllerOptions(cmdArray: ByteArray) {
-        LOG.info("Controller options data")
-    }
-
-    private fun parseStringData(cmdArray: ByteArray) {
-        LOG.info("STR: {}", String(cmdArray.copyOfRange(2, cmdArray.size - 1), StandardCharsets.UTF_8))
-    }
-
-    private fun parseVerifyPassword(cmdArray: ByteArray) {
-        if (cmdArray.size < 3) {
-            LOG.warn("Password verify data to short to parse -- ", bytesToHex(cmdArray))
-            return
+        dataType?.let {
+            it.parse(cmdArray)
+            listener.onEvent(it)
         }
-        if (cmdArray[2] == 0x00.toByte()) {
-            LOG.info("Login OK")
-        } else {
-            throw IllegalStateException("Login failed")
-        }
-    }
-
-    fun parseVersionData(cmdArray: ByteArray) {
-        LOG.info("VERSION! -- {}", bytesToHex(cmdArray))
-        if (cmdArray.size < 14) {
-            LOG.warn("Version data to short to parse -- ", bytesToHex(cmdArray))
-            return
-        }
-        val format = "%02d"
-        LOG.info("Serial: {}{}{}", format.format(cmdArray[7]), format.format(cmdArray[8]), format.format(cmdArray[9]))
-        LOG.info("Version: {}.{}", format.format(cmdArray[12]), format.format(cmdArray[13]))
-    }
-
-    private fun parseAddressStatus(cmdArray: ByteArray) {
-        LOG.info("Address status! -- {}", bytesToHex(cmdArray))
-        val address = cmdArray[2]
-        val subAddress = cmdArray[3] //0xFF = all
-        if (cmdArray[5] != 0x00.toByte()) {
-            LOG.warn("Invalid AddressStatus message");
-            return
-        }
-        val size = cmdArray[6]
-        val data = cmdArray.copyOfRange(7, 7 + size)
-
-        LOG.info("Data: Address: 0x{}0x{}-- {}", byteToHex(address), byteToHex(subAddress), bytesToHex(data))
-    }
-
-    private fun parseEvent(cmdArray: ByteArray) {
-        val address = cmdArray[2]
-        val data = cmdArray.copyOfRange(3, 3 + 4)
-
-        LOG.info("Event: Address: 0x{}-- {}", byteToHex(address), bytesToHex(data))
-    }
-
-    private fun parseFatData(cmdArray: ByteArray) {
-        val i1 = cmdArray[2]
-        val i2 = cmdArray[3]
-        val length = cmdArray[4]
-        if (cmdArray[5] != 0x00.toByte()) {
-            LOG.error("Got error in FAT data")
-            return
-        }
-
-        LOG.info("FAT data: i1: 0x{}, i2:0x{}, length:{}", byteToHex(i1), byteToHex(i2), length)
-    }
-
-    private fun parseSDdata(cmdArray: ByteArray) {
-        val i1 = cmdArray[2]
-        val i2 = cmdArray[3]
-        val num = cmdArray[4]
-        var index = 4
-        if (cmdArray[5] == 0x00.toByte() && cmdArray[6] == num) {
-            index = 6
-        }
-        val data = cmdArray.copyOfRange(index + 1, cmdArray.size - 1)
-
-        LOG.info(
-            "SD: i1: 0x{}i2: 0x{}num: 0x{}size:{} index: {}",
-            byteToHex(i1), byteToHex(i2), byteToHex(num), cmdArray.size, index
-        )
-        if (i2 == 0xFF.toByte()) {
-            parseSDheader(data)
-        }
-    }
-
-    private fun parseSDheader(cmdArray: ByteArray) {
-        val cs = Charset.forName("windows-1252")
-        val header = cmdArray.toString(cs).split("|")
-        header.forEach { h ->
-            LOG.info("H: {}", h)
-        }
-        if (header.size < 5) {
-            LOG.warn("SD header too short")
-            return
-        }
-        if (header[0] != "JSONDB") {
-            LOG.warn("Corrupt SD header. Expected JSONDB, got {}", header[0])
-            return
-        }
-        val totalSize = Integer.parseInt(header[1])
-        val blockSize = Integer.parseInt(header[2])
-        val dateTime = header[3]
-        val fileName = header[4]
-        val version = header[5]
-        LOG.info(
-            "SD header: size: {}, blocksize: {} time: {}, name: {}, version: {}",
-            totalSize, blockSize, dateTime, fileName, version
-        )
-    }
-
-
-    private fun byteToHex(byte: Byte): String {
-        return bytesToHex(byteArrayOf(byte))
-    }
-
-    private fun bytesToHex(bytes: ByteArray): String {
-        val hexChars = CharArray(bytes.size * 3)
-        for (j in bytes.indices) {
-            val v: Int = bytes[j].toInt() and 0xFF
-            hexChars[j * 3] = HEX_ARRAY[v ushr 4]
-            hexChars[j * 3 + 1] = HEX_ARRAY[v and 0x0F]
-            hexChars[j * 3 + 2] = ' '
-        }
-        return String(hexChars)
     }
 
     override fun close() {

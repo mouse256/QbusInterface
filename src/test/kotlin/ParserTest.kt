@@ -1,9 +1,9 @@
-import io.kotlintest.matchers.startWith
-import io.kotlintest.should
 import io.kotlintest.specs.StringSpec
 import java.net.Socket
 import com.nhaarman.mockitokotlin2.*
 import io.kotlintest.TestCase
+import org.muizenhol.qbus.ServerConnection
+import org.muizenhol.qbus.datatype.DataType
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
@@ -16,9 +16,15 @@ class ParserTest : StringSpec() {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
+    class MyListener: ServerConnection.Listener {
+        override fun onEvent(event: DataType) {
+            //ILB
+        }
+    }
+
     override fun beforeTest(testCase: TestCase) {
         val socket = mock<Socket> {}
-        sc = ServerConnection(socket)
+        sc = ServerConnection(socket, MyListener())
     }
 
     init {

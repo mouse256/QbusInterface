@@ -1,3 +1,6 @@
+package org.muizenhol.qbus
+
+import org.muizenhol.qbus.datatype.DataType
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileReader
@@ -5,13 +8,17 @@ import java.lang.IllegalArgumentException
 import java.lang.invoke.MethodHandles
 import java.util.*
 
-class Main {
+class Main : ServerConnection.Listener {
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
     private fun getOrThrow(prop: Properties, name:String): String {
         return prop.getProperty(name) ?: throw IllegalArgumentException("Can't find property for $name")
+    }
+
+    override fun onEvent(event: DataType) {
+        //event
     }
 
     fun main() {
@@ -26,7 +33,7 @@ class Main {
         val password = getOrThrow(prop, "password")
         val host = getOrThrow(prop, "host")
 
-        ServerConnection(host, 8446)
+        ServerConnection(host, 8446, this)
             .use { conn ->
                 conn.readWelcome()
                 Thread.sleep(1000)
