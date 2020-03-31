@@ -17,6 +17,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
 
     interface Listener {
         fun onEvent(event: DataType)
+        fun onParseException(ex: DataParseException)
     }
 
     companion object {
@@ -242,31 +243,33 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
             return
         }
         val type = cmdArray[1]
-        var dataType: DataType? = null
-        if (login) {
-            when (type) {
-                0x00.toByte() -> dataType = PasswordVerify()
-                0x02.toByte() -> dataType = StringData()
-                else -> LOG.warn(
-                    "unknown login msg type 0x{} -- {}",
-                    Common.byteToHex(type),
-                    Common.bytesToHex(cmdArray)
-                )
+
+        try {
+            val dataType = when (login) {
+                true -> when (type) {
+                    0x00.toByte() -> PasswordVerify(cmdArray)
+                    0x02.toByte() -> StringData(cmdArray)
+                    else -> throw DataParseException(
+                        "unknown loginmsg type 0x" + Common.byteToHex(type) + " -- "
+                                + Common.bytesToHex(cmdArray)
+                    )
+                }
+                false -> when (type) {
+                    0x07.toByte() -> Version(cmdArray)
+                    0x0D.toByte() -> ControllerOptions()
+                    0x38.toByte() -> AddressStatus(cmdArray)
+                    0x35.toByte() -> Event(cmdArray)
+                    0x09.toByte() -> FatData(cmdArray)
+                    0x44.toByte() -> SDData.parse(cmdArray)
+                    else -> throw DataParseException(
+                        "unknown msg type 0x" + Common.byteToHex(type) + " -- "
+                                + Common.bytesToHex(cmdArray)
+                    )
+                }
             }
-        } else {
-            when (type) {
-                0x07.toByte() -> dataType = Version()
-                0x0D.toByte() -> dataType = ControllerOptions()
-                0x38.toByte() -> dataType = AddressStatus()
-                0x35.toByte() -> dataType = Event()
-                0x09.toByte() -> dataType = FatData()
-                0x44.toByte() -> dataType = SDData()
-                else -> LOG.warn("unknown msg type 0x{} -- {}", Common.byteToHex(type), Common.bytesToHex(cmdArray))
-            }
-        }
-        dataType?.let {
-            it.parse(cmdArray)
-            listener.onEvent(it)
+            listener.onEvent(dataType)
+        } catch (ex: DataParseException) {
+            listener.onParseException(ex)
         }
     }
 

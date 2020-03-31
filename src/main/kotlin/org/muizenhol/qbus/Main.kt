@@ -1,10 +1,10 @@
 package org.muizenhol.qbus
 
+import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileReader
-import java.lang.IllegalArgumentException
 import java.lang.invoke.MethodHandles
 import java.util.*
 
@@ -13,12 +13,16 @@ class Main : ServerConnection.Listener {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
-    private fun getOrThrow(prop: Properties, name:String): String {
+    private fun getOrThrow(prop: Properties, name: String): String {
         return prop.getProperty(name) ?: throw IllegalArgumentException("Can't find property for $name")
     }
 
     override fun onEvent(event: DataType) {
         //event
+    }
+
+    override fun onParseException(ex: DataParseException) {
+        //Exception
     }
 
     fun main() {

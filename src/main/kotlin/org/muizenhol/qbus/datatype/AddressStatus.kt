@@ -4,18 +4,17 @@ import org.muizenhol.qbus.Common
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
-class AddressStatus : DataType {
+class AddressStatus(cmdArray: ByteArray) : DataType {
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
-    override fun parse(cmdArray: ByteArray) {
+    init {
         LOG.info("Address status! -- {}", Common.bytesToHex(cmdArray))
         val address = cmdArray[2]
         val subAddress = cmdArray[3] //0xFF = all
         if (cmdArray[5] != 0x00.toByte()) {
-            LOG.warn("Invalid AddressStatus message");
-            return
+            throw DataParseException("Invalid AddressStatus message");
         }
         val size = cmdArray[6]
         val data = cmdArray.copyOfRange(7, 7 + size)

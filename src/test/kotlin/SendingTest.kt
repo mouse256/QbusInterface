@@ -1,13 +1,14 @@
-import io.kotlintest.specs.StringSpec
-import java.net.Socket
 import com.nhaarman.mockitokotlin2.*
 import io.kotlintest.TestCase
 import io.kotlintest.shouldBe
+import io.kotlintest.specs.StringSpec
 import org.muizenhol.qbus.ServerConnection
+import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
 import org.slf4j.LoggerFactory
 import java.io.OutputStream
 import java.lang.invoke.MethodHandles
+import java.net.Socket
 
 @ExperimentalUnsignedTypes
 class SendingTest : StringSpec() {
@@ -20,9 +21,13 @@ class SendingTest : StringSpec() {
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
     }
 
-    class MyListener: ServerConnection.Listener {
+    class MyListener : ServerConnection.Listener {
         override fun onEvent(event: DataType) {
             //ILB
+        }
+
+        override fun onParseException(ex: DataParseException) {
+            throw RuntimeException("Test failed", ex)
         }
     }
 
