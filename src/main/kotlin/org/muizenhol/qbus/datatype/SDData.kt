@@ -33,6 +33,7 @@ sealed class SDData : DataType {
     class SDDataHeader(cmdArray: ByteArray) : SDData() {
         val totalSize: Int
         val blockSize: Int
+        val numBlocks:Int
 
         init {
             val cs = Charset.forName("windows-1252")
@@ -48,12 +49,13 @@ sealed class SDData : DataType {
             }
             totalSize = Integer.parseInt(header[1])
             blockSize = Integer.parseInt(header[2])
+            numBlocks = Math.ceil(totalSize.toDouble() / blockSize.toDouble()).toInt()
             val dateTime = header[3]
             val fileName = header[4]
             val version = header[5]
             LOG.info(
-                "SD header: size: {}, blocksize: {} time: {}, name: {}, version: {}",
-                totalSize, blockSize, dateTime, fileName, version
+                "SD header: size: {}, blocksize: {}, {} blocks, time: {}, name: {}, version: {}",
+                totalSize, blockSize, numBlocks, dateTime, fileName, version
             )
         }
 

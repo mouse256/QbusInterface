@@ -7,7 +7,7 @@ class PasswordVerify(cmdArray: ByteArray) : DataType {
         //private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
-    private val loginOk: Boolean
+    val loginOk: Boolean
 
     init {
         if (cmdArray.size < 3) {

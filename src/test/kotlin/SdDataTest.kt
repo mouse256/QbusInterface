@@ -5,6 +5,7 @@ import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
 import org.muizenhol.qbus.datatype.SDData
+import org.muizenhol.qbus.sddata.SdDataParser
 import org.slf4j.LoggerFactory
 import java.io.*
 import java.lang.invoke.MethodHandles
@@ -57,11 +58,13 @@ class SdDataTest : StringSpec() {
 
     init {
         "Parsing version data" {
+            val sdDataParser = SdDataParser()
             var expectHeader = true
             var count = 0
-            var file = File("C:\\Users\\tombi\\Documents\\qbusout.zip")
+            val file = File("/tmp/qbusout.zip")
+            LOG.info("Parsing raw data")
             BufferedOutputStream(FileOutputStream(file)).use { writer ->
-                myListener.setHeaderListener { sdHeader ->
+                myListener.setHeaderListener {
                     assert(expectHeader)
                     expectHeader = false
                     sc.parse(dataStruct.sdPart1)
@@ -70,6 +73,8 @@ class SdDataTest : StringSpec() {
                     assert(!expectHeader)
                     count++
                     assert(count == sdData.id)
+
+                    sdDataParser.addData(sdData.getData())
                     /*LOG.info(
                     "SD data begin: {}",
                     sdData.getData().copyOfRange(0, 5).toString(StandardCharsets.UTF_8)
@@ -88,6 +93,14 @@ class SdDataTest : StringSpec() {
                 }
                 sc.parse(dataStruct.sdHeader)
             }
+
+            LOG.info("Parsing zip data")
+            sdDataParser.parse()
+
+        }
+        "Parsing json data" {
+            val parser = SdDataParser()
+            parser.parse(FileInputStream(File("out.json")))
         }
 
     }

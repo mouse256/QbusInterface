@@ -1,8 +1,12 @@
 package org.muizenhol.qbus
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+
 
 class Common {
     companion object {
+        val OBJECT_MAPPER = ObjectMapper().registerKotlinModule()
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
 
         fun bytesToHex(bytes: ByteArray): String {
