@@ -38,9 +38,9 @@ class SendingTest : StringSpec() {
                 LOG.info("GOT: {}", it)
             }
             on { write(any<ByteArray>(), any<Int>(), any<Int>()) } doAnswer {
-                var data2 = it.getArgument<ByteArray>(0)
-                var from = it.getArgument<Int>(1)
-                var to = it.getArgument<Int>(2)
+                val data2 = it.getArgument<ByteArray>(0)
+                val from = it.getArgument<Int>(1)
+                val to = it.getArgument<Int>(2)
                 data.add(data2.copyOfRange(from, to))
 
                 Unit

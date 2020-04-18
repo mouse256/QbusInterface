@@ -105,6 +105,14 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         formatMsgAndSend(cmdArray)
     }
 
+    fun writeGetAddressStatus(address: Byte) {
+        val cmd: Byte = 0x38
+        val subAddress = 0xff.toByte() //all
+
+        val cmdArray = byteArrayOf(START_BYTE, cmd, address, subAddress, 0)
+        formatMsgAndSend(cmdArray)
+    }
+
     fun writegetSDData(part: Int = 0) {
         val cmd: Byte = 0x44
         val i1: Byte = 0x29

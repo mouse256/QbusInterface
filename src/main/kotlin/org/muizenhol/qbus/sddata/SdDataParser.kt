@@ -5,15 +5,18 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.muizenhol.qbus.Common
 import org.slf4j.LoggerFactory
-import java.io.*
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.lang.invoke.MethodHandles
 import java.util.zip.ZipInputStream
 
 
 class SdDataParser() {
     companion object {
-        private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+        val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
+
     var data = ByteArray(0)
 
     fun addData(data: ByteArray) {
@@ -41,9 +44,11 @@ class SdDataParser() {
     fun parse(stream: InputStream): SdDataStruct {
         return parse(Common.OBJECT_MAPPER.readValue<SdDataJson>(stream))
     }
+
     fun parse(stream: ByteArray): SdDataStruct {
         return parse(Common.OBJECT_MAPPER.readValue<SdDataJson>(stream))
     }
+
     private fun parse(data: SdDataJson): SdDataStruct {
         LOG.info("SD data: version: {} -- serial: {}", data.version, data.serialNumber)
 
@@ -58,19 +63,29 @@ class SdDataParser() {
             SdDataStruct.Output(
                 name = output.originalName,
                 id = output.id,
-                address = output.address,
-                subAddress = output.subAddress,
+                address = output.address.toByte(),
+                subAddress = output.subAddress.toByte(),
                 controllerId = output.controllerId,
                 place = placesMap.getOrDefault(output.placeId, SdDataStruct.Place(-1, "Unknown"))
             )
         }.associateBy { it.id }
 
-        return SdDataStruct(
+        val d = SdDataStruct(
             version = data.version,
             serialNumber = data.serialNumber,
             places = placesMap,
             outputs = outputs
         )
+        d.outputs.values.sortedBy { x -> x.address }
+            .forEach {
+                LOG.info(
+                    "Output {} - {} ({})",
+                    Common.byteToHex(it.address),
+                    Common.byteToHex(it.subAddress),
+                    it.name
+                )
+            }
+        return d
     }
 }
 
@@ -88,11 +103,23 @@ data class SdDataStruct(
     data class Output(
         val id: Int,
         val name: String,
-        val address: Int,
-        val subAddress: Int,
+        val address: Byte,
+        val subAddress: Byte,
         val controllerId: Int,
         val place: Place
-    )
+
+    ) {
+        var value: Byte = 0
+        fun updateValue(value: Byte) {
+            SdDataParser.LOG.info(
+                "Update value for {} from {} to {}",
+                name,
+                Common.byteToHex(this.value),
+                Common.byteToHex(value)
+            )
+            this.value = value
+        }
+    }
 
 }
 

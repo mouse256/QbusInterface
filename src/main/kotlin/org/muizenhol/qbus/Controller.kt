@@ -20,6 +20,7 @@ class Controller(
     private val conn: ServerConnection = ServerConnection(host, port, this)
     private var running = true
     private var downloader: Downloader? = null
+    private var stateFetcher: StateFetcher? = null
 
 
     override fun onEvent(event: DataType) {
@@ -79,6 +80,13 @@ class Controller(
                     LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                 }
             }
+            is AddressStatus -> {
+                if (state == State.FETCH_STATE) {
+                    stateFetcher?.add(event)
+                } else {
+                    LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
+                }
+            }
             else -> {
                 LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
             }
@@ -97,7 +105,8 @@ class Controller(
         DOWNLOAD_SD_DATA_HEADER,
         DOWNLOAD_SD_DATA,
         FETCH_STATE,
-        LOGIN
+        LOGIN,
+        READY
     }
 
     private inner class Downloader(val header: SDData.SDDataHeader) {
@@ -111,7 +120,7 @@ class Controller(
                 conn.writegetSDData(currentBlock)
             } else {
                 parsedData = parser.parse()
-                updateState(State.FETCH_STATE)
+                stateFetcher = parsedData?.let { StateFetcher(it) }
             }
         }
 
@@ -119,6 +128,43 @@ class Controller(
             parser.addData(data.getData())
             nextBlock()
         }
+    }
+
+    private inner class StateFetcher(private val data: SdDataStruct) {
+        var currentItem = 0
+        val addressList: List<Byte>
+
+        init {
+            addressList = data.outputs.map { out -> out.value.address }.distinct()
+            updateState(State.FETCH_STATE)
+            next()
+        }
+
+        private fun next() {
+            if (currentItem >= addressList.size) {
+                updateState(State.READY)
+                return
+            }
+            conn.writeGetAddressStatus(addressList[currentItem])
+            currentItem++
+        }
+
+        fun add(state: AddressStatus) {
+            data.outputs.filterValues { v -> v.address == state.address }
+                .forEach { _, v ->
+                    LOG.info("Updating {} ({})", v.subAddress, v.name)
+                    if (v.subAddress >= state.data.size) {
+                        LOG.warn("Unexpected subaddress {} on {} ({})", v.subAddress, v.address, v.name)
+                    } else {
+                        v.updateValue(state.data[v.subAddress.toInt()])
+                    }
+                    //TODO update parsing: eg thermostats are incorrect.
+                    //Data 2a 2a 02 00 means "setpoint" "current" "state" "unknown"
+                    //where temperate needs to be divided by 2 to get the actual value
+                }
+            next()
+        }
+
     }
 
     private fun updateState(newState: State) {
