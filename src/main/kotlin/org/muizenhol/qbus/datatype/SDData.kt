@@ -30,36 +30,36 @@ sealed class SDData : DataType {
         }
     }
 
-    class SDDataHeader(cmdArray: ByteArray) : SDData() {
-        val totalSize: Int
-        val blockSize: Int
-        val numBlocks:Int
+    class SDDataHeader(totalSize: Int, blockSize: Int) : SDData() {
 
-        init {
-            val cs = Charset.forName("windows-1252")
-            val header = cmdArray.toString(cs).split("|")
-            header.forEach { h ->
-                LOG.info("H: {}", h)
+        val numBlocks: Int = kotlin.math.ceil(totalSize.toDouble() / blockSize.toDouble()).toInt()
+
+        companion object {
+            operator fun invoke(cmdArray: ByteArray): SDDataHeader {
+                val cs = Charset.forName("windows-1252")
+                val header = cmdArray.toString(cs).split("|")
+                header.forEach { h ->
+                    LOG.info("H: {}", h)
+                }
+                if (header.size < 5) {
+                    throw DataParseException("SD header too short")
+                }
+                if (header[0] != "JSONDB") {
+                    throw DataParseException("Corrupt SD header. Expected JSONDB, got " + header[0])
+                }
+                val totalSize = Integer.parseInt(header[1])
+                val blockSize = Integer.parseInt(header[2])
+
+                val dateTime = header[3]
+                val fileName = header[4]
+                val version = header[5]
+                LOG.info(
+                    "SD header: size: {}, blocksize: {}, time: {}, name: {}, version: {}",
+                    totalSize, blockSize, dateTime, fileName, version
+                )
+                return SDDataHeader(totalSize, blockSize)
             }
-            if (header.size < 5) {
-                throw DataParseException("SD header too short")
-            }
-            if (header[0] != "JSONDB") {
-                throw DataParseException("Corrupt SD header. Expected JSONDB, got " + header[0])
-            }
-            totalSize = Integer.parseInt(header[1])
-            blockSize = Integer.parseInt(header[2])
-            numBlocks = Math.ceil(totalSize.toDouble() / blockSize.toDouble()).toInt()
-            val dateTime = header[3]
-            val fileName = header[4]
-            val version = header[5]
-            LOG.info(
-                "SD header: size: {}, blocksize: {}, {} blocks, time: {}, name: {}, version: {}",
-                totalSize, blockSize, numBlocks, dateTime, fileName, version
-            )
         }
-
-
     }
 
     class SDDataBlock(val id: Int, private val data: ByteArray) : SDData() {

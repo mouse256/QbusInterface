@@ -1,5 +1,6 @@
 package org.muizenhol.qbus
 
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileReader
@@ -27,9 +28,12 @@ class Main {
             .use { fr -> prop.load(fr) }
         val username = getOrThrow(prop, "username")
         val password = getOrThrow(prop, "password")
+        val serial = getOrThrow(prop, "serial")
         val host = getOrThrow(prop, "host")
-        val controller = Controller(username, password, host)
-        controller.run()
+        val controller = Controller(serial, username, password, host)
+        runBlocking {
+            controller.run().join()
+        }
 
     }
 }

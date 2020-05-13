@@ -1,9 +1,9 @@
 package org.muizenhol.qbus.sddata
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.muizenhol.qbus.Common
+import org.muizenhol.qbus.datatype.AddressStatus
+import org.muizenhol.qbus.datatype.Event
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -24,6 +24,7 @@ class SdDataParser() {
     }
 
     fun parse(): SdDataStruct? {
+        LOG.info("Unzipping SD data")
         ZipInputStream(ByteArrayInputStream(data)).use { zis ->
             var zipEntry = zis.nextEntry
             while (zipEntry != null) {
@@ -66,7 +67,11 @@ class SdDataParser() {
                 address = output.address.toByte(),
                 subAddress = output.subAddress.toByte(),
                 controllerId = output.controllerId,
-                place = placesMap.getOrDefault(output.placeId, SdDataStruct.Place(-1, "Unknown"))
+                place = placesMap.getOrDefault(output.placeId, SdDataStruct.Place(-1, "Unknown")),
+                type = SdDataStruct.Type.values()
+                    .toList()
+                    .filter { it.id == output.typeId }
+                    .firstOrNull() ?: SdDataStruct.Type.UNKNOWN
             )
         }.associateBy { it.id }
 
@@ -94,11 +99,23 @@ data class SdDataStruct(
     val serialNumber: Int,
     val places: Map<Int, Place>,
     val outputs: Map<Int, Output>
+    /** key: id */
 ) {
     data class Place(
         val id: Int,
         val name: String
     )
+
+    enum class Type(val id: Int) { //TODO: not sure if those id's are fixed?
+        UNKNOWN(-1),
+        ON_OFF(1),
+        DIMMER1B(3), //1 button dimmer
+        DIMMER2B(4), //2 button dimmier
+        TIMER(5),
+        SHUTTER(24),
+        THERMOSTAT(25),
+        THERMOSTAT2(15), //no clue what the difference is with the other thermostat
+    }
 
     data class Output(
         val id: Int,
@@ -106,8 +123,8 @@ data class SdDataStruct(
         val address: Byte,
         val subAddress: Byte,
         val controllerId: Int,
-        val place: Place
-
+        val place: Place,
+        val type: Type
     ) {
         var value: Byte = 0
         fun updateValue(value: Byte) {
@@ -121,39 +138,30 @@ data class SdDataStruct(
         }
     }
 
-}
+    private fun update(address: Byte, data: ByteArray) {
+        outputs.filterValues { v -> v.address == address }
+            .forEach { _, v ->
+                SdDataParser.LOG.info("Updating {} ({})", v.subAddress, v.name)
+                if (v.subAddress >= data.size) {
+                    SdDataParser.LOG.warn("Unexpected subaddress {} on {} ({})", v.subAddress, v.address, v.name)
+                } else {
+                    v.updateValue(data[v.subAddress.toInt()])
+                }
+                //TODO update parsing: eg thermostats are incorrect.
+                //Data 2a 2a 02 00 means "setpoint" "current" "state" "unknown"
+                //where temperate needs to be divided by 2 to get the actual value
+            }
+    }
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-data class SdDataJson(
-    @JsonProperty("Version") val version: String,
-    @JsonProperty("SerialNumber") val serialNumber: Int,
-    @JsonProperty("Places") val places: List<Place>,
-    @JsonProperty("Outputs") val outputs: List<Outputs>
-) {
-    data class Place(
-        @JsonProperty("ID") val id: Int,
-        @JsonProperty("ParentID") val parentId: Int,
-        @JsonProperty("Name") val name: String
-    )
+    fun update(event: AddressStatus) {
+        if (event.subAddress != 0xFF.toByte()) {
+            throw IllegalStateException("Can't handle this subaddress")
+        }
+        update(event.address, event.data)
+    }
 
-    data class Outputs(
-        @JsonProperty("Address") val address: Int,
-        @JsonProperty("SubAddress") val subAddress: Int,
-        @JsonProperty("ControllerId") val controllerId: Int,
-        @JsonProperty("ID") val id: Int,
-        @JsonProperty("OriginalName") val originalName: String,
-        @JsonProperty("ShortName") val shortName: String,
-        @JsonProperty("TypeId") val typeId: Int,
-        @JsonProperty("Real") val real: Boolean,
-        @JsonProperty("System") val system: Boolean,
-        @JsonProperty("EventsOnSD") val eventsOnSd: Boolean,
-        @JsonProperty("PlaceId") val placeId: Int,
-        @JsonProperty("IconNr") val iconNr: Int,
-        @JsonProperty("RangeMin") val rangeMin: Int?,
-        @JsonProperty("RangeMax") val rangeMax: Int?,
-        @JsonProperty("Correction") val correction: Int?,
-        @JsonProperty("Offset") val offset: Int?,
-        @JsonProperty("HasSensor") val hasSensor: Boolean?,
-        @JsonProperty("Unit") val unit: String?
-    )
+    fun update(event: Event) {
+        update(event.address, event.data)
+    }
+
 }
