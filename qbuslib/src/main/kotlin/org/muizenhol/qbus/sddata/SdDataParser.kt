@@ -2,8 +2,6 @@ package org.muizenhol.qbus.sddata
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.muizenhol.qbus.Common
-import org.muizenhol.qbus.datatype.AddressStatus
-import org.muizenhol.qbus.datatype.Event
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -127,41 +125,6 @@ data class SdDataStruct(
         val type: Type
     ) {
         var value: Byte = 0
-        fun updateValue(value: Byte) {
-            SdDataParser.LOG.info(
-                "Update value for {} from {} to {}",
-                name,
-                Common.byteToHex(this.value),
-                Common.byteToHex(value)
-            )
-            this.value = value
-        }
-    }
-
-    private fun update(address: Byte, data: ByteArray) {
-        outputs.filterValues { v -> v.address == address }
-            .forEach { _, v ->
-                SdDataParser.LOG.info("Updating {} ({})", v.subAddress, v.name)
-                if (v.subAddress >= data.size) {
-                    SdDataParser.LOG.warn("Unexpected subaddress {} on {} ({})", v.subAddress, v.address, v.name)
-                } else {
-                    v.updateValue(data[v.subAddress.toInt()])
-                }
-                //TODO update parsing: eg thermostats are incorrect.
-                //Data 2a 2a 02 00 means "setpoint" "current" "state" "unknown"
-                //where temperate needs to be divided by 2 to get the actual value
-            }
-    }
-
-    fun update(event: AddressStatus) {
-        if (event.subAddress != 0xFF.toByte()) {
-            throw IllegalStateException("Can't handle this subaddress")
-        }
-        update(event.address, event.data)
-    }
-
-    fun update(event: Event) {
-        update(event.address, event.data)
     }
 
 }

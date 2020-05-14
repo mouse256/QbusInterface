@@ -79,7 +79,7 @@ class ControllerTest : StringSpec() {
                 handleGetStatus(invocation.getArgument(0))
             }
         }
-        controller = Controller(serialDefault, "username", "password", serverConnection)
+        controller = Controller(serialDefault, "username", "password", serverConnection,{})
     }
 
     override fun afterTest(testCase: TestCase, result: TestResult) {
@@ -166,7 +166,7 @@ class ControllerTest : StringSpec() {
                 sunny {
                     runBlocking {
                         LOG.info("V1")
-                        assertThat(controller.data!!.outputs[outOnOff1.id]!!.value, equalTo(0xff.toByte()))
+                        assertThat(controller.dataHandler!!.data.outputs[outOnOff1.id]!!.value, equalTo(0xff.toByte()))
 
                         LOG.info("V2")
                         sendEvent(
@@ -174,14 +174,14 @@ class ControllerTest : StringSpec() {
                         ).join()
 
                         LOG.info("V3")
-                        assertThat(controller.data!!.outputs[outOnOff1.id]!!.value, equalTo(0x00.toByte()))
+                        assertThat(controller.dataHandler!!.data.outputs[outOnOff1.id]!!.value, equalTo(0x00.toByte()))
 
                         LOG.info("V4")
                         sendEvent(
                             Event(outOnOff1.address.toByte(), byteArrayOf(0xff.toByte(), 0x00, 0x00, 0x00))
                         ).join()
                         LOG.info("V5")
-                        assertThat(controller.data!!.outputs[outOnOff1.id]!!.value, equalTo(0xFF.toByte()))
+                        assertThat(controller.dataHandler!!.data.outputs[outOnOff1.id]!!.value, equalTo(0xFF.toByte()))
                         LOG.info("V6")
                         controller.close()
                     }

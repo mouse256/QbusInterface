@@ -30,12 +30,13 @@ class Main {
         val password = getOrThrow(prop, "password")
         val serial = getOrThrow(prop, "serial")
         val host = getOrThrow(prop, "host")
-        val controller = Controller(serial, username, password, host)
+        val controller = Controller(serial, username, password, host, { ready -> })
         runBlocking {
             controller.run().join()
         }
 
     }
+
 }
 
 fun main() {

@@ -1,17 +1,16 @@
 package org.muizenhol.qbus
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Job
 import org.muizenhol.qbus.datatype.*
 import org.muizenhol.qbus.sddata.SdDataParser
-import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
 class Controller private constructor(
     private val username: String,
     private val password: String,
-    private val serial: String
+    private val serial: String,
+    private val onready: (DataHandler) -> Unit
 ) : ServerConnection.Listener, AutoCloseable {
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
@@ -22,18 +21,25 @@ class Controller private constructor(
     private var downloader: Downloader? = null
     private var stateFetcher: StateFetcher? = null
     private var stateChangeListener: ((State) -> Unit)? = null
+    var dataHandler: DataHandler? = null
 
     val job = CompletableDeferred<Unit>()
-    var data: SdDataStruct? = null
 
 
-    constructor(serial: String, username: String, password: String, host: String, port: Int = 8446) :
-            this(username, password, serial) {
+    constructor(
+        serial: String, username: String, password: String, host: String,
+        onready: (DataHandler) -> Unit,
+        port: Int = 8446
+    ) :
+            this(username, password, serial, onready) {
         conn = ServerConnection(host, port, this)
     }
 
-    constructor(serial: String, username: String, password: String, connection: ServerConnection) :
-            this(username, password, serial) {
+    constructor(
+        serial: String, username: String, password: String, connection: ServerConnection,
+         onready: (DataHandler) -> Unit
+    ) :
+            this(username, password, serial, onready) {
         conn = connection
     }
 
@@ -113,7 +119,7 @@ class Controller private constructor(
                 }
                 is Event -> {
                     if (state == State.READY) {
-                        data!!.update(event)
+                        dataHandler!!.update(event)
                     } else {
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
@@ -153,7 +159,13 @@ class Controller private constructor(
                 LOG.info("Downloading SD block {}", currentBlock)
                 conn.writegetSDData(currentBlock)
             } else {
-                data = parser.parse()
+                LOG.info("READY???")
+                parser.parse()
+                parser.parse()?.let { d ->
+                    LOG.info("READY!!!")
+                    dataHandler = DataHandler(d)
+                    onready(dataHandler!!)
+                }
                 stateFetcher = StateFetcher()
                 stateFetcher!!.next()
             }
@@ -170,7 +182,7 @@ class Controller private constructor(
         val addressList: List<Byte>
 
         init {
-            addressList = data!!.outputs.map { out -> out.value.address }.distinct()
+            addressList = dataHandler!!.data.outputs.map { out -> out.value.address }.distinct()
             updateState(State.FETCH_STATE)
         }
 
@@ -185,7 +197,7 @@ class Controller private constructor(
         }
 
         fun add(state: AddressStatus) {
-            data!!.update(state)
+            dataHandler!!.update(state)
             next()
         }
 
@@ -206,7 +218,7 @@ class Controller private constructor(
         this.stateChangeListener = stateChangeListener
         conn.startDataReader()
         conn.readWelcome()
-           Thread.sleep(1000)
+        Thread.sleep(1000)
         updateState(State.WAIT_FOR_VERSION)
         conn.writeMsgVersion()
         return job
