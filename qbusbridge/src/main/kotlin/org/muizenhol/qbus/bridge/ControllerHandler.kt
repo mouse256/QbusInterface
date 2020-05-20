@@ -1,6 +1,11 @@
 package org.muizenhol.qbus.bridge
 
+import io.netty.handler.codec.mqtt.MqttQoS
 import io.quarkus.runtime.Startup
+import io.vertx.core.Vertx
+import io.vertx.core.buffer.Buffer
+import io.vertx.mqtt.MqttClient
+import io.vertx.mqtt.messages.MqttPublishMessage
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.DataHandler
 import org.muizenhol.qbus.sddata.SdDataStruct
@@ -9,7 +14,9 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileReader
 import java.lang.invoke.MethodHandles
+import java.nio.charset.StandardCharsets
 import java.util.*
+import java.util.regex.Pattern
 import javax.annotation.PostConstruct
 import javax.annotation.PreDestroy
 import javax.enterprise.context.ApplicationScoped
@@ -19,14 +26,16 @@ import javax.enterprise.context.ApplicationScoped
 class ControllerHandler {
     var dataHandler: DataHandler? = null
     lateinit var controller: Controller
+    lateinit var mqttClient: MqttClient
+
 
     @PostConstruct
     fun create() {
         LOG.info("creating vertx")
-        /*val vertx: Vertx = Vertx.vertx()
-        webClient = WebClient.create(vertx)
-        vertx.setPeriodic(Duration.ofMinutes(30).toMillis(), { l -> fetchRss() })
-        fetchRss() //setPeriod does not fire immediately, do so.*/
+
+        val vertx = Vertx.vertx()
+        mqttClient = MqttClient.create(vertx);
+
 
         val prop = Properties()
         val file = File("/tmp/qbus.properties")
@@ -36,9 +45,18 @@ class ControllerHandler {
         val password = getOrThrow(prop, "password")
         val serial = getOrThrow(prop, "serial")
         val host = getOrThrow(prop, "host")
+
+        val mqttHost = getOrThrow(prop, "mqtt.host")
+        val mqttPort: Int = prop.getOrDefault("mqtt.port", 1883) as Int
+
+        mqttClient.connect(mqttPort, mqttHost) { s ->
+            LOG.info("MQTT connected")
+        }
+
         controller = Controller(serial, username, password, host, { ready ->
             LOG.info("XXXXXXXXx ready")
             dataHandler = ready
+            subscribe()
             ready.setEventListener(this::onDataUpdate)
         })
         controller.run()
@@ -48,17 +66,87 @@ class ControllerHandler {
     fun destroy() {
         LOG.info("Destroying")
         controller.close()
+        mqttClient.disconnect()
     }
 
     private fun getOrThrow(prop: Properties, name: String): String {
         return prop.getProperty(name) ?: throw IllegalArgumentException("Can't find property for $name")
     }
 
-    private fun onDataUpdate(data: SdDataStruct.Output) {
-        LOG.info("update for {} to {}", data.name, data.value)
+    private fun subscribe() {
+        dataHandler?.let { dh ->
+            mqttClient.publishHandler(this::handleOpenhabEvent)
+            mqttClient.subscribe(
+                "qbus/" + dh.data.serialNumber + "/+/+/command",
+                MqttQoS.AT_LEAST_ONCE.value()
+            )
+        }
     }
+
+    private fun handleOpenhabEvent(msg: MqttPublishMessage) {
+        LOG.info("Got msg on {}", msg.topicName())
+        val matcher = PATTERN_COMMAND.matcher(msg.topicName())
+        if (matcher.matches()) {
+            val type = matcher.group(2)
+            val id = matcher.group(3).toInt()
+            val payload = msg.payload().toString(StandardCharsets.UTF_8)
+            LOG.info("Got {} data for {}: {}", type, id, payload)
+            when (type) {
+                "switch" -> handleSwitchUpdate(id, payload)
+                else -> LOG.warn("Can't handle type {}", type)
+            }
+        }
+        else {
+            LOG.info("Topic not matched")
+        }
+    }
+
+    private fun handleSwitchUpdate(id: Int, payload: String) {
+        val out = dataHandler?.getOutput(id)
+        if (out != null) {
+            when (payload) {
+                "ON" -> 0XFF.toByte()
+                "OFF" -> 0X00.toByte()
+                else -> null
+            }?.let {
+                //value -> dataHandler?.update(id, value)
+                out.value = it
+                controller.setNewState(out)
+            }
+        }
+        else {
+            LOG.warn("can't find output with id {}", id)
+        }
+    }
+
+    private fun onDataUpdate(serial: String, data: SdDataStruct.Output) {
+        LOG.info("update for {} to {}", data.name, data.value)
+        if (data.type == SdDataStruct.Type.ON_OFF) {
+            //TODO add support for more types
+            when (data.value) {
+                0x00.toByte() -> "OFF"
+                0xFF.toByte() -> "ON"
+                else -> null
+            }?.let { v ->
+                LOG.info("Pub swith to {}", v)
+                publish(serial, data, "switch", Buffer.buffer(v))
+            }
+        }
+    }
+
+    private fun publish(serial: String, data: SdDataStruct.Output, type: String, payload: Buffer) {
+        mqttClient.publish(
+            "qbus/" + serial + "/" + type + "/" + data.id + "/state",
+            payload,
+            MqttQoS.AT_LEAST_ONCE,
+            false,
+            true
+        )
+    }
+
 
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+        private val PATTERN_COMMAND = Pattern.compile("qbus/([^/]+)/([^/]+)/(\\d+)/command")
     }
 }

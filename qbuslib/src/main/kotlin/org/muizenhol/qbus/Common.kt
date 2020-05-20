@@ -6,6 +6,7 @@ import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 
 class Common {
     companion object {
+        const val XFF = 0xFF.toByte()
         val OBJECT_MAPPER = ObjectMapper().registerKotlinModule()
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
 

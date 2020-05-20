@@ -1,5 +1,6 @@
 import com.nhaarman.mockitokotlin2.doAnswer
 import com.nhaarman.mockitokotlin2.mock
+import com.nhaarman.mockitokotlin2.spy
 import io.kotlintest.TestCase
 import io.kotlintest.TestResult
 import io.kotlintest.specs.StringSpec
@@ -13,6 +14,7 @@ import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.datatype.*
 import org.muizenhol.qbus.sddata.SdDataJson
+import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayOutputStream
 import java.lang.invoke.MethodHandles
@@ -64,7 +66,7 @@ class ControllerTest : StringSpec() {
             }
             on { writeControllerOptions() } doAnswer {
                 LOG.debug("Mocking controller options")
-                sendEvent(ControllerOptions())
+                sendEvent(ControllerOptions(0x00, byteArrayOf()))
                 void()
             }
             on { writegetFATData() } doAnswer {
@@ -126,7 +128,7 @@ class ControllerTest : StringSpec() {
 
         val dataJson = SdDataJson(
             version = "01.02",
-            serialNumber = 12345678,
+            serialNumber = "12345678",
             outputs = listOf(outOnOff1),
             places = emptyList()
         )

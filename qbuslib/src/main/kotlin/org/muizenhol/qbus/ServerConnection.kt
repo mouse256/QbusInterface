@@ -24,7 +24,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         private val PREFIX = byteArrayOf('Q'.toByte(), 'B'.toByte(), 'U'.toByte(), 'S'.toByte(), 0, 0, 0, 0, 0)
         private const val STOP_BYTE: Byte = 0x23 //end-of-transmission
-        private const val START_BYTE: Byte = 0x2A //*
+        const val START_BYTE: Byte = 0x2A //*
         private const val BYTE_MSG: Byte = 0xFF.toByte()
         private const val BYTE_LOGIN: Byte = 0xFA.toByte()
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
@@ -66,7 +66,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         }
     }
 
-    fun formatMsgAndSend(data: ByteArray, login: Boolean = false) {
+    private fun formatMsgAndSend(data: ByteArray, login: Boolean = false) {
         val cmdArray = ByteArray(data.size + 4)
 
         //first 3 bytes are to be filled in later
@@ -97,20 +97,15 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     }
 
     fun writeControllerOptions() {
-        val cmd: Byte = 0x0D
-        val i1: Byte = 0x0D
-        val data: Byte = 0x07
-
-        val cmdArray = byteArrayOf(START_BYTE, cmd, i1, 0, data)
-        formatMsgAndSend(cmdArray)
+        write(ControllerOptions(0x0D, byteArrayOf(0x07)))
     }
 
     fun writeGetAddressStatus(address: Byte) {
-        val cmd: Byte = 0x38
-        val subAddress = 0xff.toByte() //all
+        write(AddressStatus(address, AddressStatus.SUBADDRESS_ALL))
+    }
 
-        val cmdArray = byteArrayOf(START_BYTE, cmd, address, subAddress, 0)
-        formatMsgAndSend(cmdArray)
+    fun write(data: DataType) {
+        formatMsgAndSend(data.serialize())
     }
 
     fun writegetSDData(part: Int = 0) {
@@ -127,13 +122,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     }
 
     fun writegetFATData() {
-        val cmd: Byte = 0x09
-        val i1: Byte = 0x00
-        val i2: Byte = 0x00
-        val data: Byte = 0x00.toByte()
-
-        val cmdArray = byteArrayOf(START_BYTE, cmd, i1, i2, data)
-        formatMsgAndSend(cmdArray)
+        formatMsgAndSend(FatData().serialize())
     }
 
     fun login(username: String, password: String) {
@@ -255,20 +244,20 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         try {
             val dataType = when (login) {
                 true -> when (type) {
-                    0x00.toByte() -> PasswordVerify(cmdArray)
-                    0x02.toByte() -> StringData(cmdArray)
+                    DataTypeId.PASSWORD_VERIFY.id -> PasswordVerify(cmdArray)
+                    DataTypeId.STRING_DATA.id -> StringData(cmdArray)
                     else -> throw DataParseException(
                         "unknown loginmsg type 0x" + Common.byteToHex(type) + " -- "
                                 + Common.bytesToHex(cmdArray)
                     )
                 }
                 false -> when (type) {
-                    0x07.toByte() -> Version(cmdArray)
-                    0x0D.toByte() -> ControllerOptions()
-                    0x38.toByte() -> AddressStatus(cmdArray)
-                    0x35.toByte() -> Event(cmdArray)
-                    0x09.toByte() -> FatData(cmdArray)
-                    0x44.toByte() -> SDData.parse(cmdArray)
+                    DataTypeId.VERSION.id -> Version(cmdArray)
+                    DataTypeId.CONTROLLER_OPTIONS.id -> ControllerOptions(0x00, byteArrayOf())
+                    DataTypeId.ADDRESS_STATUS.id -> AddressStatus(cmdArray)
+                    DataTypeId.EVENT.id -> Event(cmdArray)
+                    DataTypeId.FAT_DATA.id -> FatData(cmdArray)
+                    DataTypeId.SD_DATA.id -> SDData.parse(cmdArray)
                     else -> throw DataParseException(
                         "unknown msg type 0x" + Common.byteToHex(type) + " -- "
                                 + Common.bytesToHex(cmdArray)

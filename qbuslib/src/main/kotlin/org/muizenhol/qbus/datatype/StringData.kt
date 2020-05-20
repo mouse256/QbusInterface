@@ -5,6 +5,8 @@ import java.lang.invoke.MethodHandles
 import java.nio.charset.StandardCharsets
 
 class StringData(cmdArray: ByteArray) : DataType {
+    override val typeId = DataTypeId.STRING_DATA
+
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }

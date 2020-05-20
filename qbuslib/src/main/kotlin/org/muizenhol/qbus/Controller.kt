@@ -3,6 +3,7 @@ package org.muizenhol.qbus
 import kotlinx.coroutines.CompletableDeferred
 import org.muizenhol.qbus.datatype.*
 import org.muizenhol.qbus.sddata.SdDataParser
+import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
@@ -37,7 +38,7 @@ class Controller private constructor(
 
     constructor(
         serial: String, username: String, password: String, connection: ServerConnection,
-         onready: (DataHandler) -> Unit
+        onready: (DataHandler) -> Unit
     ) :
             this(username, password, serial, onready) {
         conn = connection
@@ -207,6 +208,24 @@ class Controller private constructor(
         LOG.info("Updating state {} -> {}", state, newState)
         state = newState
         stateChangeListener?.invoke(newState)
+    }
+
+    fun setNewState(output: SdDataStruct.Output) {
+        LOG.info("sending event to Qbus: {} ({}: {}) -> {}", output.type, output.id, output.name, output.value)
+        output.value?.let { value ->
+            when (output.type) {
+                SdDataStruct.Type.ON_OFF -> {
+                    val addressStatus = AddressStatus(
+                        output.address,
+                        output.subAddress,
+                        data = byteArrayOf(0x00, value),
+                        write = true
+                    )
+                    conn.write(addressStatus)
+                }
+                else -> LOG.warn("Don't know how to handle type " + output.type)
+            }
+        }
     }
 
     override fun close() {

@@ -94,7 +94,7 @@ class SdDataParser() {
 
 data class SdDataStruct(
     val version: String,
-    val serialNumber: Int,
+    val serialNumber: String,
     val places: Map<Int, Place>,
     val outputs: Map<Int, Output>
     /** key: id */
@@ -124,7 +124,7 @@ data class SdDataStruct(
         val place: Place,
         val type: Type
     ) {
-        var value: Byte = 0
+        var value: Byte? = null
     }
 
 }

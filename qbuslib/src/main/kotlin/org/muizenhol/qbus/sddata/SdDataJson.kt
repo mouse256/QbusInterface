@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class SdDataJson(
     @JsonProperty("Version") val version: String,
-    @JsonProperty("SerialNumber") val serialNumber: Int,
+    @JsonProperty("SerialNumber") val serialNumber: String,
     @JsonProperty("Places") val places: List<Place>,
     @JsonProperty("Outputs") val outputs: List<Outputs>
 ) {

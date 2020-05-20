@@ -4,3 +4,6 @@ build/
 qbus.properties
 out.json
 .swp
+*.tcpdump
+*.pcap
+

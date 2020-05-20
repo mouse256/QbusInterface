@@ -10,10 +10,14 @@ class DataHandler(val data: SdDataStruct) {
     /*interface Listener {
         fun onEvent(event: DataType)
     }*/
-    var listener: (SdDataStruct.Output) -> Unit = {}
+    var listener: (String, SdDataStruct.Output) -> Unit = { _, _ -> }
 
-    fun setEventListener(listener: (SdDataStruct.Output) -> Unit) {
+    fun setEventListener(listener: (String, SdDataStruct.Output) -> Unit) {
         this.listener = listener
+    }
+
+    fun getOutput(id: Int): SdDataStruct.Output? {
+        return data.outputs.get(id)?.copy()
     }
 
     private fun updateValue(output: SdDataStruct.Output, value: Byte) {
@@ -24,11 +28,11 @@ class DataHandler(val data: SdDataStruct) {
         SdDataParser.LOG.info(
             "Update value for {} from {} to {}",
             output.name,
-            Common.byteToHex(output.value),
+            output.value?.let { v -> Common.byteToHex(v) },
             Common.byteToHex(value)
         )
         output.value = value
-        listener.invoke(output)
+        listener.invoke(data.serialNumber, output)
     }
 
     private fun update(address: Byte, newData: ByteArray) {
@@ -55,7 +59,12 @@ class DataHandler(val data: SdDataStruct) {
 
     fun update(event: Event) {
         update(event.address, event.data)
+    }
 
+    fun update(id: Int, value: Byte) {
+        data.outputs.get(id)?.let { out ->
+            updateValue(out, value)
+        }
     }
 
 

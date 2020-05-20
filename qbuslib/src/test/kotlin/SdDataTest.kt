@@ -72,7 +72,7 @@ class SdDataTest : StringSpec() {
                 myListener.setDataListener { sdData ->
                     assert(!expectHeader)
                     count++
-                    assert(count == sdData.id)
+                    assert(count == sdData.nr)
 
                     sdDataParser.addData(sdData.getData())
                     /*LOG.info(

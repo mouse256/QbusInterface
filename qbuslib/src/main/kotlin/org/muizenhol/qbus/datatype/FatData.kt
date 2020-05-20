@@ -4,7 +4,9 @@ import org.muizenhol.qbus.Common
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
-class FatData : DataType {
+class FatData(val data: ByteArray = byteArrayOf(0x00)) : DataType {
+    override val typeId = DataTypeId.FAT_DATA
+
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         operator fun invoke(cmdArray: ByteArray): FatData {
@@ -18,5 +20,9 @@ class FatData : DataType {
             LOG.info("FAT data: i1: 0x{}, i2:0x{}, length:{}", Common.byteToHex(i1), Common.byteToHex(i2), length)
             return FatData()
         }
+    }
+
+    override fun serialize(): ByteArray {
+        return serializeHeader(0x00, 0x00).plus(data)
     }
 }

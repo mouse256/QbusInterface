@@ -1,6 +1,8 @@
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinWithJavaTarget
+
 plugins {
-    id("org.jetbrains.kotlin.jvm").version("1.3.41")
-    id("org.jetbrains.kotlin.plugin.allopen").version("1.3.41")
+    kotlin("jvm")
+    id("org.jetbrains.kotlin.plugin.allopen")
     id("io.quarkus")
 }
 
@@ -13,8 +15,9 @@ dependencies {
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.5")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.5")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.10.+")
+    implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
 
     testImplementation("io.quarkus:quarkus-junit5")
@@ -42,11 +45,14 @@ java {
     targetCompatibility = JavaVersion.VERSION_11
 }
 
-/*compileKotlin {
-    kotlinOptions.jvmTarget = JavaVersion.VERSION_11
-    kotlinOptions.javaParameters = true
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11.toString()
+        javaParameters = true
+    }
 }
 
+/*
 compileTestKotlin {
     kotlinOptions.jvmTarget = JavaVersion.VERSION_11
 }*/

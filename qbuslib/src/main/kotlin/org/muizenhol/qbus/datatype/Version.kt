@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
 class Version(val version: String, val serial: String) : DataType {
+    override val typeId = DataTypeId.VERSION
+
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         operator fun invoke(cmdArray: ByteArray): Version {

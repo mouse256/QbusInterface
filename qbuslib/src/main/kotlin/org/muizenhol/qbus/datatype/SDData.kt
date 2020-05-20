@@ -1,11 +1,14 @@
 package org.muizenhol.qbus.datatype
 
 import org.muizenhol.qbus.Common
+import org.muizenhol.qbus.ServerConnection
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 import java.nio.charset.Charset
 
 sealed class SDData : DataType {
+    override val typeId = DataTypeId.SD_DATA
+
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
 
@@ -62,7 +65,7 @@ sealed class SDData : DataType {
         }
     }
 
-    class SDDataBlock(val id: Int, private val data: ByteArray) : SDData() {
+    class SDDataBlock(val nr: Int, private val data: ByteArray) : SDData() {
         fun getData(): ByteArray {
             return data
         }

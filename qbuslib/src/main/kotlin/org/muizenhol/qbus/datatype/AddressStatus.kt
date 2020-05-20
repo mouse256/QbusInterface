@@ -4,9 +4,17 @@ import org.muizenhol.qbus.Common
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
-class AddressStatus(val address: Byte, val subAddress: Byte, val data: ByteArray) : DataType {
+class AddressStatus(
+    val address: Byte,
+    val subAddress: Byte,
+    val data: ByteArray = byteArrayOf(0x00),
+    val write: Boolean = false
+) : DataType {
+    override val typeId = DataTypeId.ADDRESS_STATUS
+
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+        const val SUBADDRESS_ALL = 0xFF.toByte()
         operator fun invoke(cmdArray: ByteArray): AddressStatus {
             LOG.info("Address status! -- {}", Common.bytesToHex(cmdArray))
             val address = cmdArray[2]
@@ -27,5 +35,7 @@ class AddressStatus(val address: Byte, val subAddress: Byte, val data: ByteArray
         }
     }
 
-
+    override fun serialize(): ByteArray {
+        return serializeHeader(address, subAddress, write).plus(data)
+    }
 }

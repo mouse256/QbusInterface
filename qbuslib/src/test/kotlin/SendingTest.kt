@@ -1,10 +1,14 @@
 import com.nhaarman.mockitokotlin2.*
 import io.kotlintest.TestCase
+import io.kotlintest.TestResult
 import io.kotlintest.shouldBe
 import io.kotlintest.specs.StringSpec
+import org.muizenhol.qbus.Common
+import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
+import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
 import java.io.OutputStream
 import java.lang.invoke.MethodHandles
@@ -13,45 +17,23 @@ import java.net.Socket
 @ExperimentalUnsignedTypes
 class SendingTest : StringSpec() {
     lateinit var sc: ServerConnection
-    lateinit var outputStream: OutputStream
     private val data = mutableListOf<ByteArray>()
+    lateinit var ctrl: Controller
 
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
     }
 
-    class MyListener : ServerConnection.Listener {
-        override fun onEvent(event: DataType) {
-            //ILB
-        }
-
-        override fun onParseException(ex: DataParseException) {
-            throw RuntimeException("Test failed", ex)
-        }
-    }
-
     override fun beforeTest(testCase: TestCase) {
         data.clear()
-        outputStream = mock<OutputStream> {
-            on { write(any<ByteArray>()) } doAnswer {
-                LOG.info("GOT: {}", it)
-            }
-            on { write(any<ByteArray>(), any<Int>(), any<Int>()) } doAnswer {
-                val data2 = it.getArgument<ByteArray>(0)
-                val from = it.getArgument<Int>(1)
-                val to = it.getArgument<Int>(2)
-                data.add(data2.copyOfRange(from, to))
+        val stub = StubbedServerConnection{dataItem -> data.add(dataItem)}
+        sc = stub.sc
+        ctrl = Controller("serial", "user", "pass", stub.sc, {})
+    }
 
-                Unit
-            }
-        }
-        // data = data + data
-
-        val socket = mock<Socket> {
-            on { getOutputStream() } doReturn outputStream
-        }
-        sc = ServerConnection(socket, MyListener())
+    override fun afterTest(testCase: TestCase, result: TestResult) {
+        ctrl.close()
     }
 
     private fun bytesToHex(bytes: ByteArray): String {
@@ -67,11 +49,16 @@ class SendingTest : StringSpec() {
         }
         return String(hexChars)
     }
+    private fun writeEvent(value: Byte) {
+        val place = SdDataStruct.Place(14, "myplace")
+        val out = SdDataStruct.Output(12, "myname", 0x07, 0x02, 13, place, SdDataStruct.Type.ON_OFF)
+        out.value = value
+        ctrl.setNewState(out)
+    }
 
     init {
         "Sending version" {
             sc.writeMsgVersion()
-            verify(outputStream).flush()
             data.size shouldBe 1
             data[0] shouldBe ubyteArrayOf(
                 0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -80,7 +67,6 @@ class SendingTest : StringSpec() {
         }
         "Sending controller options" {
             sc.writeControllerOptions()
-            verify(outputStream).flush()
             data.size shouldBe 1
             data[0] shouldBe ubyteArrayOf(
                 0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -89,7 +75,6 @@ class SendingTest : StringSpec() {
         }
         "Sending Login" {
             sc.login("myUser", "myPass")
-            verify(outputStream).flush()
             data.size shouldBe 1
             data[0] shouldBe ubyteArrayOf(
                 0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -102,7 +87,6 @@ class SendingTest : StringSpec() {
         }
         "Sending FAT data" {
             sc.writegetFATData()
-            verify(outputStream).flush()
             data.size shouldBe 1
             data[0] shouldBe ubyteArrayOf(
                 0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -112,7 +96,6 @@ class SendingTest : StringSpec() {
         }
         "Sending get SD header" {
             sc.writegetSDData()
-            verify(outputStream).flush()
             data.size shouldBe 1
             data[0] shouldBe ubyteArrayOf(
                 0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -122,7 +105,6 @@ class SendingTest : StringSpec() {
         }
         "Sending get SD part1" {
             sc.writegetSDData(1)
-            verify(outputStream).flush()
             data.size shouldBe 1
             data[0] shouldBe ubyteArrayOf(
                 0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
@@ -130,6 +112,24 @@ class SendingTest : StringSpec() {
                 0xefu, 0x23u
             ).toByteArray()
         }
+        "Sending write OFF event via controller" {
+           writeEvent(0x00)
+           data.size shouldBe 1
+            data[0] shouldBe ubyteArrayOf(
+                0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
+                0x00u, 0xffu, 0x00u, 0x06u, 0x2au, 0xb8u, 0x07u, 0x02u,
+                0x00u, 0x00u, 0x23u
+            ).toByteArray()
+       }
+       "Sending write ON event via controller" {
+           writeEvent(Common.XFF)
+           data.size shouldBe 1
+           data[0] shouldBe ubyteArrayOf(
+               0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
+               0x00u, 0xffu, 0x00u, 0x06u, 0x2au, 0xb8u, 0x07u, 0x02u,
+               0x00u, 0xffu, 0x23u
+           ).toByteArray()
+       }
     }
 }
 

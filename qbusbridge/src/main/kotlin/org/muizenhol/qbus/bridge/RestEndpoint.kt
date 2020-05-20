@@ -1,7 +1,5 @@
 package org.muizenhol.qbus.bridge
 
-import org.muizenhol.qbus.Common
-import org.muizenhol.qbus.sddata.SdDataJson
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -11,7 +9,6 @@ import javax.inject.Inject
 import javax.ws.rs.GET
 import javax.ws.rs.Path
 import javax.ws.rs.Produces
-import javax.ws.rs.core.Application
 import javax.ws.rs.core.MediaType
 
 
@@ -38,8 +35,6 @@ class ExampleResource {
 
 
     companion object {
-        private const val HLN = "HLN"
-        private const val HOST = "https://muizenhol.no-ip.org/hln/"
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 }
