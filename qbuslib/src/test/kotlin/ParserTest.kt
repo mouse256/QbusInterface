@@ -44,6 +44,10 @@ class ParserTest : StringSpec() {
             LOG.info("Status update")
             sc.parse(dataStruct.statusUpdate)
         }
+        "Status update write" {
+            LOG.info("Status update with write bit set")
+            sc.parse(dataStruct.statusUpdateWrite)
+        }
         "Event" {
             LOG.info("Event")
             sc.parse(dataStruct.event)

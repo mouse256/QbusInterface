@@ -33,6 +33,48 @@ class ExampleResource {
         return controller.dataHandler?.data
     }
 
+    @GET
+    @Path("openhab/things")
+    @Produces(MediaType.TEXT_PLAIN)
+    fun openhabThings(): String {
+        val out = StringBuilder()
+        out.append("Bridge mqtt:broker:qbusBroker [ host=\"${controller.mqttHost}\", secure=false] {\n")
+        val data = controller.dataHandler?.data
+        data?.let {
+            it.outputs.values
+                .filter { output -> output.type == SdDataStruct.Type.ON_OFF }
+                .forEach { output ->
+                    out.append("  Thing topic qbus_thing_${output.id} \"${output.name}\" @ \"QBus\" {\n")
+                        .append("    Channels:\n")
+                        .append("      Type switch : qbus_channel_${output.id} ")
+                        .append("[ stateTopic=\"qbus/${it.serialNumber}/switch/${output.id}/state\" , ")
+                        .append("commandTopic=\"qbus/${it.serialNumber}/switch/${output.id}/command\", ")
+                        .append("on=\"ON\", off=\"OFF\"]\n")
+                        .append("  }\n")
+                }
+        }
+        out.append("}\n")
+        return out.toString()
+    }
+
+    @GET
+    @Path("openhab/items")
+    @Produces(MediaType.TEXT_PLAIN)
+    fun openhabItems(): String {
+        val out = StringBuilder()
+        val data = controller.dataHandler?.data
+        data?.let {
+            it.outputs.values
+                .filter { output -> output.type == SdDataStruct.Type.ON_OFF }
+                .forEach { output ->
+                    out.append("Switch qbus_item_${output.id} \"${output.name}\" ")
+                        .append("{channel=\"mqtt:topic:qbusBroker:qbus_thing_${output.id}:qbus_channel_${output.id}\"}\n")
+
+                }
+        }
+        return out.toString()
+    }
+
 
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())

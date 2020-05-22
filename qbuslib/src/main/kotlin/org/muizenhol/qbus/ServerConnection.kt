@@ -10,6 +10,7 @@ import java.lang.invoke.MethodHandles
 import java.net.Socket
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import kotlin.experimental.and
 
 
 class ServerConnection(socket: Socket, private val listener: Listener) : AutoCloseable {
@@ -239,7 +240,9 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
             LOG.warn("Corrupted start byte -- {}", Common.bytesToHex(cmdArray))
             return
         }
-        val type = cmdArray[1]
+
+        //val type = if (cmdArray[1].toInt()< 128) cmdArray[1] else (cmdArray[1].toInt() - 128).toByte()
+        val type = cmdArray[1] and 0x7F.toByte()
 
         try {
             val dataType = when (login) {
@@ -264,8 +267,10 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
                     )
                 }
             }
+            LOG.info("Parsed type: {}", dataType.typeId)
             listener.onEvent(dataType)
         } catch (ex: DataParseException) {
+            LOG.warn("Parsing error")
             listener.onParseException(ex)
         }
     }

@@ -27,6 +27,7 @@ class ControllerHandler {
     var dataHandler: DataHandler? = null
     lateinit var controller: Controller
     lateinit var mqttClient: MqttClient
+    lateinit var mqttHost: String
 
 
     @PostConstruct
@@ -46,7 +47,7 @@ class ControllerHandler {
         val serial = getOrThrow(prop, "serial")
         val host = getOrThrow(prop, "host")
 
-        val mqttHost = getOrThrow(prop, "mqtt.host")
+        mqttHost = getOrThrow(prop, "mqtt.host")
         val mqttPort: Int = prop.getOrDefault("mqtt.port", 1883) as Int
 
         mqttClient.connect(mqttPort, mqttHost) { s ->

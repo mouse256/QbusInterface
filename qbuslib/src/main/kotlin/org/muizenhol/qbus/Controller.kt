@@ -5,6 +5,7 @@ import org.muizenhol.qbus.datatype.*
 import org.muizenhol.qbus.sddata.SdDataParser
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
+import java.lang.Integer.parseInt
 import java.lang.invoke.MethodHandles
 
 class Controller private constructor(
@@ -44,6 +45,13 @@ class Controller private constructor(
         conn = connection
     }
 
+    fun test(x: Int, s: String) {
+        when (x) {
+            parseInt(s) -> print("s encodes x")
+            else -> print("s does not encode x")
+        }
+    }
+
     override fun onEvent(event: DataType) {
         //event
         try {
@@ -57,7 +65,6 @@ class Controller private constructor(
                                     "Invalid serial, got " + event.serial + " expected " + serial
                                 )
                             )
-                            return
                         }
                         updateState(State.LOGIN)
                         conn.login(username, password)
@@ -114,6 +121,8 @@ class Controller private constructor(
                 is AddressStatus -> {
                     if (state == State.FETCH_STATE) {
                         stateFetcher!!.add(event)
+                    } else if (state == State.READY) {
+                        LOG.debug("Ignoring AddressStatus in Ready state.")// also sent as event.
                     } else {
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
@@ -135,6 +144,7 @@ class Controller private constructor(
     }
 
     override fun onParseException(ex: DataParseException) {
+        LOG.error("Parse exception", ex)
         job.completeExceptionally(ex)
     }
 
