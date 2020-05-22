@@ -2,14 +2,15 @@ package org.muizenhol.qbus
 
 import org.muizenhol.qbus.datatype.AddressStatus
 import org.muizenhol.qbus.datatype.Event
-import org.muizenhol.qbus.sddata.SdDataParser
 import org.muizenhol.qbus.sddata.SdDataStruct
+import org.slf4j.LoggerFactory
+import java.lang.invoke.MethodHandles
 
 class DataHandler(val data: SdDataStruct) {
+    companion object {
+        val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+    }
 
-    /*interface Listener {
-        fun onEvent(event: DataType)
-    }*/
     var listener: (String, SdDataStruct.Output) -> Unit = { _, _ -> }
 
     fun setEventListener(listener: (String, SdDataStruct.Output) -> Unit) {
@@ -22,10 +23,10 @@ class DataHandler(val data: SdDataStruct) {
 
     private fun updateValue(output: SdDataStruct.Output, value: Byte) {
         if (value == output.value) {
-            SdDataParser.LOG.trace("Not updating value for {} since identical", output.name)
+            LOG.trace("Not updating value for {} since identical", output.name)
             return //Nothing to do
         }
-        SdDataParser.LOG.info(
+        LOG.info(
             "Update value for {} from {} to {}",
             output.name,
             output.value?.let { v -> Common.byteToHex(v) },
@@ -38,9 +39,9 @@ class DataHandler(val data: SdDataStruct) {
     private fun update(address: Byte, newData: ByteArray) {
         data.outputs.filterValues { v -> v.address == address }
             .forEach { _, v ->
-                SdDataParser.LOG.info("Updating {} ({})", v.subAddress, v.name)
+                LOG.debug("Updating {} ({})", v.subAddress, v.name)
                 if (v.subAddress >= newData.size) {
-                    SdDataParser.LOG.warn("Unexpected subaddress {} on {} ({})", v.subAddress, v.address, v.name)
+                    LOG.warn("Unexpected subaddress {} on {} ({})", v.subAddress, v.address, v.name)
                 } else {
                     updateValue(v, newData[v.subAddress.toInt()])
                 }

@@ -77,7 +77,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         cmdArray[1] = ((data.size shr 8) and 0x000000FF).toByte()
         cmdArray[cmdArray.size - 1] = STOP_BYTE
         data.copyInto(cmdArray, 3)
-        LOG.info("s1: {}, s2: {}", cmdArray[1], cmdArray[2])
+        LOG.trace("s1: {}, s2: {}", cmdArray[1], cmdArray[2])
 
         LOG.info(
             "Sending: {}{}", Common.bytesToHex(
@@ -154,7 +154,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     }
 
     fun parse(msg: ByteArray) {
-        LOG.info("Parsing")
+        LOG.trace("Parsing")
 
         for (i in 0..10) {
             val pos = getEndPosition(msg, i)
@@ -189,7 +189,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     }
 
     private fun parseSingle(msg: ByteArray) {
-        LOG.info("Parsing single")
+        LOG.trace("Parsing single")
         if (msg.size < PREFIX.size) {
             LOG.warn("Msg too short, can't parse: {} -- {}", msg.size, Common.bytesToHex(msg))
             return

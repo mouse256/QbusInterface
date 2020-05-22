@@ -44,9 +44,9 @@ class ExampleResource {
             it.outputs.values
                 .filter { output -> output.type == SdDataStruct.Type.ON_OFF }
                 .forEach { output ->
-                    out.append("  Thing topic qbus_thing_${output.id} \"${output.name}\" @ \"QBus\" {\n")
+                    out.append("  Thing topic ${formatName("thing", output)} \"${output.name}\" @ \"QBus\" {\n")
                         .append("    Channels:\n")
-                        .append("      Type switch : qbus_channel_${output.id} ")
+                        .append("      Type switch : ${formatName("channel", output)} ")
                         .append("[ stateTopic=\"qbus/${it.serialNumber}/switch/${output.id}/state\" , ")
                         .append("commandTopic=\"qbus/${it.serialNumber}/switch/${output.id}/command\", ")
                         .append("on=\"ON\", off=\"OFF\"]\n")
@@ -55,6 +55,10 @@ class ExampleResource {
         }
         out.append("}\n")
         return out.toString()
+    }
+
+    private fun formatName(type: String, output: SdDataStruct.Output): String {
+        return "qbus_${type}_" + output.name.replace(" ", "_")
     }
 
     @GET
@@ -67,8 +71,8 @@ class ExampleResource {
             it.outputs.values
                 .filter { output -> output.type == SdDataStruct.Type.ON_OFF }
                 .forEach { output ->
-                    out.append("Switch qbus_item_${output.id} \"${output.name}\" ")
-                        .append("{channel=\"mqtt:topic:qbusBroker:qbus_thing_${output.id}:qbus_channel_${output.id}\"}\n")
+                    out.append("Switch ${formatName("item", output)} \"${output.name}\" ")
+                        .append("{channel=\"mqtt:topic:qbusBroker:${formatName("thing", output)}:${formatName("channel", output)}\"}\n")
 
                 }
         }

@@ -55,7 +55,6 @@ class ControllerHandler {
         }
 
         controller = Controller(serial, username, password, host, { ready ->
-            LOG.info("XXXXXXXXx ready")
             dataHandler = ready
             subscribe()
             ready.setEventListener(this::onDataUpdate)
@@ -121,7 +120,7 @@ class ControllerHandler {
     }
 
     private fun onDataUpdate(serial: String, data: SdDataStruct.Output) {
-        LOG.info("update for {} to {}", data.name, data.value)
+        LOG.debug("update for {} to {}", data.name, data.value)
         if (data.type == SdDataStruct.Type.ON_OFF) {
             //TODO add support for more types
             when (data.value) {
@@ -129,7 +128,7 @@ class ControllerHandler {
                 0xFF.toByte() -> "ON"
                 else -> null
             }?.let { v ->
-                LOG.info("Pub swith to {}", v)
+                LOG.info("MQTT Publish switch to {}", v)
                 publish(serial, data, "switch", Buffer.buffer(v))
             }
         }
