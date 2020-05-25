@@ -39,13 +39,19 @@ class SdDataParser() {
         return null
     }
 
-    //fun parse(file: File) {
     fun parse(stream: InputStream): SdDataStruct {
         return parse(Common.OBJECT_MAPPER.readValue<SdDataJson>(stream))
     }
 
     fun parse(stream: ByteArray): SdDataStruct {
         return parse(Common.OBJECT_MAPPER.readValue<SdDataJson>(stream))
+    }
+
+    private fun isReadOnly(name: String): Boolean {
+        //TODO: make dynamic
+        return name.toLowerCase().startsWith("actuator_")
+                || name.toLowerCase().startsWith("wp_")
+                || name.toLowerCase().startsWith("z_")
     }
 
     private fun parse(data: SdDataJson): SdDataStruct {
@@ -66,6 +72,7 @@ class SdDataParser() {
                 subAddress = output.subAddress.toByte(),
                 controllerId = output.controllerId,
                 place = placesMap.getOrDefault(output.placeId, SdDataStruct.Place(-1, "Unknown")),
+                readonly = isReadOnly(output.originalName),
                 type = SdDataStruct.Type.values()
                     .toList()
                     .filter { it.id == output.typeId }
@@ -122,6 +129,7 @@ data class SdDataStruct(
         val subAddress: Byte,
         val controllerId: Int,
         val place: Place,
+        val readonly: Boolean,
         val type: Type
     ) {
         var value: Byte? = null

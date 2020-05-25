@@ -51,7 +51,7 @@ class SendingTest : StringSpec() {
     }
     private fun writeEvent(value: Byte) {
         val place = SdDataStruct.Place(14, "myplace")
-        val out = SdDataStruct.Output(12, "myname", 0x07, 0x02, 13, place, SdDataStruct.Type.ON_OFF)
+        val out = SdDataStruct.Output(12, "myname", 0x07, 0x02, 13, place, false, SdDataStruct.Type.ON_OFF)
         out.value = value
         ctrl.setNewState(out)
     }

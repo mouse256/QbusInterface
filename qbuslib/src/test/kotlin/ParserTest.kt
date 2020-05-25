@@ -25,6 +25,10 @@ class ParserTest : StringSpec() {
         override fun onParseException(ex: DataParseException) {
             throw RuntimeException("Test failed", ex)
         }
+
+        override fun onConnectionClosed() {
+            throw RuntimeException("Test failed")
+        }
     }
 
     override fun beforeTest(testCase: TestCase) {

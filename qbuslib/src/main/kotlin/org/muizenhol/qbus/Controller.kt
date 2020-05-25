@@ -12,6 +12,8 @@ class Controller private constructor(
     private val username: String,
     private val password: String,
     private val serial: String,
+    private val host: String?,
+    private val port: Int,
     private val onready: (DataHandler) -> Unit
 ) : ServerConnection.Listener, AutoCloseable {
     companion object {
@@ -33,16 +35,21 @@ class Controller private constructor(
         onready: (DataHandler) -> Unit,
         port: Int = 8446
     ) :
-            this(username, password, serial, onready) {
-        conn = ServerConnection(host, port, this)
+            this(username, password, serial, host, port, onready) {
+        initServerConnection()
     }
 
     constructor(
         serial: String, username: String, password: String, connection: ServerConnection,
         onready: (DataHandler) -> Unit
     ) :
-            this(username, password, serial, onready) {
+            this(username, password, serial, null, 0, onready) {
         conn = connection
+    }
+
+    private fun initServerConnection() {
+        val h = host ?: throw IllegalStateException("Can't restart server connection")
+        conn = ServerConnection(h, port, this)
     }
 
     fun test(x: Int, s: String) {
@@ -50,6 +57,18 @@ class Controller private constructor(
             parseInt(s) -> print("s encodes x")
             else -> print("s does not encode x")
         }
+    }
+
+    override fun onConnectionClosed() {
+        LOG.info("Restarting connection")
+        try {
+            //try to close again, just in case not all resources were cleaned
+            conn.close()
+        } catch (e: Exception) {
+            //Don't care
+        }
+        initServerConnection()
+        run2()
     }
 
     override fun onEvent(event: DataType) {
@@ -178,7 +197,7 @@ class Controller private constructor(
                     onready(dataHandler!!)
                 }
                 stateFetcher = StateFetcher()
-                stateFetcher!!.next()
+                stateFetcher!!.start()
             }
         }
 
@@ -194,10 +213,9 @@ class Controller private constructor(
 
         init {
             addressList = dataHandler!!.data.outputs.map { out -> out.value.address }.distinct()
-            updateState(State.FETCH_STATE)
         }
 
-        fun next() {
+        private fun next() {
             if (currentItem >= addressList.size) {
                 updateState(State.READY)
                 return
@@ -209,6 +227,12 @@ class Controller private constructor(
 
         fun add(state: AddressStatus) {
             dataHandler!!.update(state)
+            next()
+        }
+
+        fun start() {
+            currentItem = 0
+            updateState(State.FETCH_STATE)
             next()
         }
 
@@ -245,12 +269,20 @@ class Controller private constructor(
 
     fun run(stateChangeListener: ((State) -> Unit)? = null): CompletableDeferred<Unit> {
         this.stateChangeListener = stateChangeListener
+        run2()
+        return job
+    }
+
+    private fun run2() {
         conn.startDataReader()
         conn.readWelcome()
         Thread.sleep(1000)
         updateState(State.WAIT_FOR_VERSION)
         conn.writeMsgVersion()
-        return job
+    }
+
+    fun triggerReadError() {
+        conn.triggerReadError()
     }
 }
 

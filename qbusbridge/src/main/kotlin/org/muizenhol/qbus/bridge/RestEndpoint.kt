@@ -34,6 +34,14 @@ class ExampleResource {
     }
 
     @GET
+    @Path("readerror")
+    @Produces(MediaType.TEXT_PLAIN)
+    fun readError(): Unit {
+        LOG.info("Triggering read error")
+        return controller.controller.triggerReadError()
+    }
+
+    @GET
     @Path("openhab/things")
     @Produces(MediaType.TEXT_PLAIN)
     fun openhabThings(): String {
@@ -42,19 +50,47 @@ class ExampleResource {
         val data = controller.dataHandler?.data
         data?.let {
             it.outputs.values
-                .filter { output -> output.type == SdDataStruct.Type.ON_OFF }
+                .filter { output ->
+                    output.type == SdDataStruct.Type.ON_OFF
+                            || output.type == SdDataStruct.Type.DIMMER2B
+                            || output.type == SdDataStruct.Type.DIMMER1B
+                }
+                .sortedBy { output -> output.name }
                 .forEach { output ->
                     out.append("  Thing topic ${formatName("thing", output)} \"${output.name}\" @ \"QBus\" {\n")
                         .append("    Channels:\n")
-                        .append("      Type switch : ${formatName("channel", output)} ")
-                        .append("[ stateTopic=\"qbus/${it.serialNumber}/switch/${output.id}/state\" , ")
-                        .append("commandTopic=\"qbus/${it.serialNumber}/switch/${output.id}/command\", ")
-                        .append("on=\"ON\", off=\"OFF\"]\n")
+                        .append("      Type ").append(getOpenhabType(output))
+                        .append(" : ${formatName("channel", output)} ")
+                        .append("[ stateTopic=\"qbus/${it.serialNumber}/switch/${output.id}/state\" ")
+                    if (!output.readonly) {
+                        out.append(", commandTopic=\"qbus/${it.serialNumber}/switch/${output.id}/command\"")
+                    }
+                    out.append(", ").append(getOpenhabStates(output)).append("\n")
                         .append("  }\n")
                 }
         }
         out.append("}\n")
         return out.toString()
+    }
+
+    private fun getOpenhabStates(output: SdDataStruct.Output): String {
+        return when (output.type) {
+            SdDataStruct.Type.ON_OFF -> "on=\"ON\", off=\"OFF\""
+            SdDataStruct.Type.DIMMER1B, SdDataStruct.Type.DIMMER2B -> "min=\"0\", max=\"100\", step=\"0.5\""
+            else -> throw IllegalStateException("Not handled")
+        }
+    }
+
+    private fun getOpenhabType(output: SdDataStruct.Output): String {
+        if (output.readonly) {
+            return "string"
+        } else {
+            return when (output.type) {
+                SdDataStruct.Type.ON_OFF -> "Switch"
+                SdDataStruct.Type.DIMMER1B, SdDataStruct.Type.DIMMER2B -> "Dimmer"
+                else -> throw IllegalStateException("Not handled")
+            }
+        }
     }
 
     private fun formatName(type: String, output: SdDataStruct.Output): String {
@@ -70,9 +106,15 @@ class ExampleResource {
         data?.let {
             it.outputs.values
                 .filter { output -> output.type == SdDataStruct.Type.ON_OFF }
+                .sortedBy { output -> output.name }
                 .forEach { output ->
                     out.append("Switch ${formatName("item", output)} \"${output.name}\" ")
-                        .append("{channel=\"mqtt:topic:qbusBroker:${formatName("thing", output)}:${formatName("channel", output)}\"}\n")
+                        .append(
+                            "{channel=\"mqtt:topic:qbusBroker:${formatName("thing", output)}:${formatName(
+                                "channel",
+                                output
+                            )}\"}\n"
+                        )
 
                 }
         }

@@ -39,7 +39,7 @@ class ControllerHandler {
 
 
         val prop = Properties()
-        val file = File("/tmp/qbus.properties")
+        val file = File(System.getenv("QBUS_PROPERTY_FILE") ?: "/tmp/qbus.properties")
         FileReader(file)
             .use { fr -> prop.load(fr) }
         val username = getOrThrow(prop, "username")
@@ -50,7 +50,7 @@ class ControllerHandler {
         mqttHost = getOrThrow(prop, "mqtt.host")
         val mqttPort: Int = prop.getOrDefault("mqtt.port", 1883) as Int
 
-        mqttClient.connect(mqttPort, mqttHost) { s ->
+        mqttClient.connect(mqttPort, mqttHost) {
             LOG.info("MQTT connected")
         }
 
@@ -58,6 +58,9 @@ class ControllerHandler {
             dataHandler = ready
             subscribe()
             ready.setEventListener(this::onDataUpdate)
+
+            //publish current state
+            ready.data.outputs.values.forEach{out -> onDataUpdate(ready.data.serialNumber, out)}
         })
         controller.run()
     }
@@ -95,8 +98,7 @@ class ControllerHandler {
                 "switch" -> handleSwitchUpdate(id, payload)
                 else -> LOG.warn("Can't handle type {}", type)
             }
-        }
-        else {
+        } else {
             LOG.info("Topic not matched")
         }
     }
@@ -113,12 +115,14 @@ class ControllerHandler {
                 out.value = it
                 controller.setNewState(out)
             }
-        }
-        else {
+        } else {
             LOG.warn("can't find output with id {}", id)
         }
     }
 
+    /**
+     * Qbus to MQTT
+     */
     private fun onDataUpdate(serial: String, data: SdDataStruct.Output) {
         LOG.debug("update for {} to {}", data.name, data.value)
         if (data.type == SdDataStruct.Type.ON_OFF) {

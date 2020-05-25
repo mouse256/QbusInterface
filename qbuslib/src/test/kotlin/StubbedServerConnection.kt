@@ -26,6 +26,10 @@ class StubbedServerConnection(val onData: (ByteArray) -> Unit) {
         override fun onParseException(ex: DataParseException) {
             throw RuntimeException("Test failed", ex)
         }
+
+        override fun onConnectionClosed() {
+            throw RuntimeException("Test failed")
+        }
     }
 
     init {

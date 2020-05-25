@@ -1,11 +1,11 @@
 package org.muizenhol.qbus
 
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import org.muizenhol.qbus.datatype.*
 import org.slf4j.LoggerFactory
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.IOException
 import java.lang.invoke.MethodHandles
 import java.net.Socket
 import java.nio.charset.Charset
@@ -19,6 +19,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     interface Listener {
         fun onEvent(event: DataType)
         fun onParseException(ex: DataParseException)
+        fun onConnectionClosed()
     }
 
     companion object {
@@ -34,6 +35,8 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     private val clientSocket = socket
     private val out: BufferedOutputStream = BufferedOutputStream(clientSocket.getOutputStream())
     private val inStream: BufferedInputStream = BufferedInputStream(clientSocket.getInputStream())
+    private var running = true
+    private var bgThread: Job? = null
 
     fun readWelcome() {
         val buf = ByteArray(256)
@@ -43,13 +46,17 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
 
     fun startDataReader() {
         LOG.info("Starting datareader")
-        GlobalScope.launch {
-            var running = true
-            while (running) {
-                if (!readData()) {
-                    LOG.warn("Stream closed!")
-                    running = false
+        bgThread = GlobalScope.launch {
+            try {
+                while (running) {
+                    if (!readData()) {
+                        LOG.warn("Stream closed!")
+                        running = false
+                    }
                 }
+            } catch (e: IOException) {
+                LOG.warn("IO exception", e)
+                listener.onConnectionClosed()
             }
         }
     }
@@ -279,5 +286,10 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         out.close()
         inStream.close()
         clientSocket.close()
+        running = false
+    }
+
+    fun triggerReadError() {
+        inStream.close()
     }
 }

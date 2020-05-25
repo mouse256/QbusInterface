@@ -7,10 +7,12 @@ import org.muizenhol.qbus.datatype.DataType
 import org.muizenhol.qbus.datatype.SDData
 import org.muizenhol.qbus.sddata.SdDataParser
 import org.slf4j.LoggerFactory
-import java.io.*
+import java.io.BufferedOutputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.lang.invoke.MethodHandles
 import java.net.Socket
-import java.nio.charset.StandardCharsets
 
 @ExperimentalUnsignedTypes
 class SdDataTest : StringSpec() {
@@ -40,6 +42,10 @@ class SdDataTest : StringSpec() {
 
         override fun onParseException(ex: DataParseException) {
             throw RuntimeException("Test failure", ex)
+        }
+
+        override fun onConnectionClosed() {
+            throw RuntimeException("Test failed")
         }
 
         fun setDataListener(listener: (SDData.SDDataBlock) -> Unit) {
