@@ -14,7 +14,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.10.+")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.10.+")
 
-    runtimeOnly("org.slf4j:slf4j-simple:1.7.+")
+    //runtimeOnly("org.slf4j:slf4j-simple:1.7.+")
     //testImplementation("io.kotest:kotest-runner-junit5-jvm:4.0.0-BETA1")
     testImplementation("io.kotlintest:kotlintest-runner-junit5:3.4.2")
     testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")

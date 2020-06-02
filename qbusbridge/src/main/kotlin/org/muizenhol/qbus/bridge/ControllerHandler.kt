@@ -28,6 +28,8 @@ class ControllerHandler {
     lateinit var controller: Controller
     lateinit var mqttClient: MqttClient
     lateinit var mqttHost: String
+    var mqttPort: Int = -1
+    var reconnecting = false
 
 
     @PostConstruct
@@ -48,19 +50,16 @@ class ControllerHandler {
         val host = getOrThrow(prop, "host")
 
         mqttHost = getOrThrow(prop, "mqtt.host")
-        val mqttPort: Int = prop.getOrDefault("mqtt.port", 1883) as Int
+        mqttPort = prop.getOrDefault("mqtt.port", 1883) as Int
 
-        mqttClient.connect(mqttPort, mqttHost) {
-            LOG.info("MQTT connected")
-        }
+        connectMqtt()
 
         controller = Controller(serial, username, password, host, { ready ->
             dataHandler = ready
             subscribe()
             ready.setEventListener(this::onDataUpdate)
 
-            //publish current state
-            ready.data.outputs.values.forEach{out -> onDataUpdate(ready.data.serialNumber, out)}
+            publishCurrentState()
         })
         controller.run()
     }
@@ -70,6 +69,18 @@ class ControllerHandler {
         LOG.info("Destroying")
         controller.close()
         mqttClient.disconnect()
+    }
+
+    private fun connectMqtt(onConnected: () -> Unit = {}) {
+        mqttClient.connect(mqttPort, mqttHost) {
+            LOG.info("MQTT connected")
+            onConnected.invoke()
+        }
+    }
+
+    private fun publishCurrentState() {
+        //publish current state
+        dataHandler!!.data.outputs.values.forEach { out -> onDataUpdate(dataHandler!!.data.serialNumber, out) }
     }
 
     private fun getOrThrow(prop: Properties, name: String): String {
@@ -139,13 +150,28 @@ class ControllerHandler {
     }
 
     private fun publish(serial: String, data: SdDataStruct.Output, type: String, payload: Buffer) {
+        if (reconnecting) {
+            LOG.warn("MQTT client is reconnecting, ignoring")
+            return
+        }
         mqttClient.publish(
             "qbus/" + serial + "/" + type + "/" + data.id + "/state",
             payload,
             MqttQoS.AT_LEAST_ONCE,
             false,
             true
-        )
+        ) { ar ->
+            if (ar.failed()) {
+                LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
+                reconnecting = true
+                mqttClient.disconnect()
+                connectMqtt {
+                    subscribe()
+                    reconnecting = false
+                    publishCurrentState()
+                }
+            }
+        }
     }
 
 

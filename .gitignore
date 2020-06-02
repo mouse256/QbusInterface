@@ -6,4 +6,4 @@ out.json
 .swp
 *.tcpdump
 *.pcap
-
+buildAndPublish.sh
