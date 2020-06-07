@@ -23,14 +23,14 @@ class ExampleResource {
     @Path("hello")
     //@Produces("application/rss+xml;charset=UTF-8")
     fun hello(): String {
-        return "hello: ${controller.dataHandler}\n"
+        return "hello: ${controller.getDataHandler()}\n"
     }
 
     @GET
     @Path("raw")
     @Produces(MediaType.APPLICATION_JSON)
     fun raw(): SdDataStruct? {
-        return controller.dataHandler?.data
+        return controller.getDataHandler()?.data
     }
 
     @GET
@@ -38,7 +38,7 @@ class ExampleResource {
     @Produces(MediaType.TEXT_PLAIN)
     fun readError(): Unit {
         LOG.info("Triggering read error")
-        return controller.controller.triggerReadError()
+       // return controller.controller.triggerReadError()
     }
 
     @GET
@@ -47,7 +47,7 @@ class ExampleResource {
     fun openhabThings(): String {
         val out = StringBuilder()
         out.append("Bridge mqtt:broker:qbusBroker [ host=\"${controller.mqttHost}\", secure=false] {\n")
-        val data = controller.dataHandler?.data
+        val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
                 .filter { output ->
@@ -102,7 +102,7 @@ class ExampleResource {
     @Produces(MediaType.TEXT_PLAIN)
     fun openhabItems(): String {
         val out = StringBuilder()
-        val data = controller.dataHandler?.data
+        val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
                 .filter { output -> output.type == SdDataStruct.Type.ON_OFF }

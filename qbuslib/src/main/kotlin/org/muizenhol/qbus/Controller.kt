@@ -158,6 +158,7 @@ class Controller private constructor(
                 }
             }
         } catch (ex: Exception) {
+            LOG.error("Exception in parsing data", ex)
             job.completeExceptionally(ex)
         }
     }
@@ -190,7 +191,6 @@ class Controller private constructor(
                 conn.writegetSDData(currentBlock)
             } else {
                 LOG.info("READY???")
-                parser.parse()
                 parser.parse()?.let { d ->
                     LOG.info("READY!!!")
                     dataHandler = DataHandler(d)
