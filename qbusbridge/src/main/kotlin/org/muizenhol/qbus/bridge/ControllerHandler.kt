@@ -10,7 +10,6 @@ import java.io.File
 import java.io.FileReader
 import java.lang.invoke.MethodHandles
 import java.util.*
-import java.util.regex.Pattern
 import javax.annotation.PostConstruct
 import javax.annotation.PreDestroy
 import javax.enterprise.context.ApplicationScoped
@@ -41,6 +40,7 @@ class ControllerHandler {
         mqttHost = getOrThrow(prop, "mqtt.host")
         val mqttPort = prop.getOrDefault("mqtt.port", 1883) as Int
 
+        registerVertxCodecs(vertx)
         val mqttVerticle = MqttVerticle(mqttHost, mqttPort)
         vertx.deployVerticle(mqttVerticle)
 
@@ -59,6 +59,7 @@ class ControllerHandler {
     @PreDestroy
     fun destroy() {
         LOG.info("Destroying")
+        unregisterVertxCodecs(vertx)
         verticles.forEach { id ->
             vertx.undeploy(id)
         }
@@ -74,6 +75,15 @@ class ControllerHandler {
 
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
-        private val PATTERN_COMMAND = Pattern.compile("qbus/([^/]+)/([^/]+)/(\\d+)/command")
+
+        fun registerVertxCodecs(vertx: Vertx) {
+            LocalOnlyCodec.register(vertx, MqttVerticle.MqttItem::class.java)
+            LocalOnlyCodec.register(vertx, MqttVerticle.MqttReceiveItem::class.java)
+        }
+
+        fun unregisterVertxCodecs(vertx: Vertx) {
+            LocalOnlyCodec.unregister(vertx, MqttVerticle.MqttItem::class.java)
+            LocalOnlyCodec.unregister(vertx, MqttVerticle.MqttReceiveItem::class.java)
+        }
     }
 }

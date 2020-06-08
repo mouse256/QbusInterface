@@ -30,18 +30,26 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             //when mqtt is started, ask Qbus to send all states
             vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, QbusVerticle.StatusRequest.SEND_ALL_STATES)
         }
-        LocalOnlyCodec.register(vertx, MqttItem::class.java)
-        LocalOnlyCodec.register(vertx, MqttReceiveItem::class.java)
         consumer = vertx.eventBus().localConsumer(ADDRESS, this::handle)
     }
 
     override fun stop() {
-        mqttClient.disconnect()
-        consumer.unregister()
+        LOG.info("Stopping")
         started = false
-        LocalOnlyCodec.unregister(vertx, MqttItem::class.java)
-        LocalOnlyCodec.unregister(vertx, MqttReceiveItem::class.java)
+        consumer.unregister()
+        mqttClient.disconnect()
     }
+
+    private fun restart() {
+        if (!started) {
+            LOG.warn("Cannot restart, not yet running")
+            return
+        }
+        stop()
+        LOG.info("Restarting in 30s")
+        vertx.setTimer(Duration.ofSeconds(30).toMillis()) { start() }
+    }
+
 
     private fun connectMqtt(onConnected: () -> Unit = {}) {
         mqttClient.connect(mqttPort, mqttHost) { ar ->
@@ -86,10 +94,6 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     }
 
     private fun publish(serial: String, data: SdDataStruct.Output, type: String, payload: Buffer) {
-        /*if (reconnecting) {
-             LOG.warn("MQTT client is reconnecting, ignoring")
-             return
-         }*/
         mqttClient.publish(
             "qbus/" + serial + "/" + type + "/" + data.id + "/state",
             payload,
@@ -99,14 +103,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         ) { ar ->
             if (ar.failed()) {
                 LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
-                //TODO FIX
-                /*reconnecting = true
-                 mqttClient.disconnect()
-                 connectMqtt {
-                     subscribe()
-                     reconnecting = false
-                     publishCurrentState()
-                 }*/
+                restart()
             }
         }
     }

@@ -1,5 +1,6 @@
 package org.muizenhol.qbus.bridge
 
+import io.vertx.core.Vertx
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -20,10 +21,10 @@ class ExampleResource {
     lateinit var controller: ControllerHandler
 
     @GET
-    @Path("hello")
-    //@Produces("application/rss+xml;charset=UTF-8")
-    fun hello(): String {
-        return "hello: ${controller.getDataHandler()}\n"
+    @Path("update")
+    fun updateAll(): String {
+        controller.vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, QbusVerticle.StatusRequest.SEND_ALL_STATES)
+        return "Update-all requested"
     }
 
     @GET
@@ -38,7 +39,7 @@ class ExampleResource {
     @Produces(MediaType.TEXT_PLAIN)
     fun readError(): Unit {
         LOG.info("Triggering read error")
-       // return controller.controller.triggerReadError()
+        // return controller.controller.triggerReadError()
     }
 
     @GET

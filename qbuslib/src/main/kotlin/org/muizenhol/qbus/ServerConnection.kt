@@ -149,7 +149,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
 
     private fun getEndPosition(msg: ByteArray, num: Int): Int {
         var found = 0;
-        for (i in 0..msg.size) {
+        for (i in msg.indices) {
             if (msg[i] == STOP_BYTE) {
                 if (found == num) {
                     return i

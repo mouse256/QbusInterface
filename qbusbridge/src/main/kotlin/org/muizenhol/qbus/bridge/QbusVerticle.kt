@@ -1,6 +1,8 @@
 package org.muizenhol.qbus.bridge
 
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Handler
+import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
 import org.muizenhol.qbus.Controller
@@ -61,9 +63,13 @@ class QbusVerticle(
             LOG.debug("Qbus not yet initialized, ignoring request")
         } else {
             LOG.info("Publish current state")
-            dataHandler!!.data.outputs.values.forEach { out ->
-                onDataUpdate(dataHandler!!.data.serialNumber, out)
-            }
+            vertx.executeBlocking(Handler<Promise<String>> {
+                dataHandler!!.data.outputs.values.forEach { out ->
+                    Thread.sleep(20) //add a small delay to avoid overloading the mqtt bus
+                    onDataUpdate(dataHandler!!.data.serialNumber, out)
+                }
+                it.complete()
+            }, Handler { /*nothing*/ })
         }
     }
 
@@ -75,7 +81,7 @@ class QbusVerticle(
             LOG.info("update for {}({}) to {}", data.name, serial, data.value)
             vertx.eventBus().send(MqttVerticle.ADDRESS, MqttVerticle.MqttItem(serial, data))
         } catch (ex: Exception) {
-            LOG.warn("Error processing qbus data")
+            LOG.warn("Error processing qbus data", ex)
         }
     }
 
