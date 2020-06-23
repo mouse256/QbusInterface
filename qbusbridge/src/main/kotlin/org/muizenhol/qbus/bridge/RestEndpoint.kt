@@ -60,13 +60,13 @@ class ExampleResource {
                 .forEach { output ->
                     out.append("  Thing topic ${formatName("thing", output)} \"${output.name}\" @ \"QBus\" {\n")
                         .append("    Channels:\n")
-                        .append("      Type ").append(getOpenhabType(output))
+                        .append("      Type ").append(getOpenhabType(output).toLowerCase())
                         .append(" : ${formatName("channel", output)} ")
                         .append("[ stateTopic=\"qbus/${it.serialNumber}/switch/${output.id}/state\" ")
                     if (!output.readonly) {
                         out.append(", commandTopic=\"qbus/${it.serialNumber}/switch/${output.id}/command\"")
                     }
-                    out.append(", ").append(getOpenhabStates(output)).append("\n")
+                    out.append(", ").append(getOpenhabStates(output)).append("]\n")
                         .append("  }\n")
                 }
         }

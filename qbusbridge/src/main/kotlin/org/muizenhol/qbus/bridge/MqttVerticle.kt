@@ -6,6 +6,7 @@ import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttClient
+import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.Logger
@@ -22,7 +23,9 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
     override fun start() {
         LOG.info("Verticle starting")
-        mqttClient = MqttClient.create(vertx)
+        val mqttClientOptions = MqttClientOptions()
+            .setMaxInflightQueue(200)
+        mqttClient = MqttClient.create(vertx, mqttClientOptions)
         connectMqtt {
             LOG.info("MQTT ready")
             started = true
@@ -31,6 +34,14 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, QbusVerticle.StatusRequest.SEND_ALL_STATES)
         }
         consumer = vertx.eventBus().localConsumer(ADDRESS, this::handle)
+        mqttClient.closeHandler {
+            LOG.info("Mqtt closed, restart")
+            restart()
+        }
+        mqttClient.exceptionHandler{ex ->
+            LOG.warn("Exception", ex)
+            restart()
+        }
     }
 
     override fun stop() {
