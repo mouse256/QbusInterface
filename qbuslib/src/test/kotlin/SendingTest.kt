@@ -1,4 +1,3 @@
-import com.nhaarman.mockitokotlin2.*
 import io.kotlintest.TestCase
 import io.kotlintest.TestResult
 import io.kotlintest.shouldBe
@@ -6,13 +5,9 @@ import io.kotlintest.specs.StringSpec
 import org.muizenhol.qbus.Common
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.ServerConnection
-import org.muizenhol.qbus.datatype.DataParseException
-import org.muizenhol.qbus.datatype.DataType
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
-import java.io.OutputStream
 import java.lang.invoke.MethodHandles
-import java.net.Socket
 
 @ExperimentalUnsignedTypes
 class SendingTest : StringSpec() {
@@ -27,9 +22,11 @@ class SendingTest : StringSpec() {
 
     override fun beforeTest(testCase: TestCase) {
         data.clear()
-        val stub = StubbedServerConnection{dataItem -> data.add(dataItem)}
+        val stub = StubbedServerConnection { dataItem -> data.add(dataItem) }
         sc = stub.sc
-        ctrl = Controller("serial", "user", "pass", stub.sc, {})
+        ctrl = Controller("serial", "user", "pass", "localhost",
+            { exception -> LOG.error("Exception", exception) },
+            connectionCreator = { _, _, _ -> stub.sc })
     }
 
     override fun afterTest(testCase: TestCase, result: TestResult) {
@@ -49,6 +46,7 @@ class SendingTest : StringSpec() {
         }
         return String(hexChars)
     }
+
     private fun writeEvent(value: Byte) {
         val place = SdDataStruct.Place(14, "myplace")
         val out = SdDataStruct.Output(12, "myname", 0x07, 0x02, 13, place, false, SdDataStruct.Type.ON_OFF)
@@ -113,23 +111,23 @@ class SendingTest : StringSpec() {
             ).toByteArray()
         }
         "Sending write OFF event via controller" {
-           writeEvent(0x00)
-           data.size shouldBe 1
+            writeEvent(0x00)
+            data.size shouldBe 1
             data[0] shouldBe ubyteArrayOf(
                 0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
                 0x00u, 0xffu, 0x00u, 0x06u, 0x2au, 0xb8u, 0x07u, 0x02u,
                 0x00u, 0x00u, 0x23u
             ).toByteArray()
-       }
-       "Sending write ON event via controller" {
-           writeEvent(Common.XFF)
-           data.size shouldBe 1
-           data[0] shouldBe ubyteArrayOf(
-               0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
-               0x00u, 0xffu, 0x00u, 0x06u, 0x2au, 0xb8u, 0x07u, 0x02u,
-               0x00u, 0xffu, 0x23u
-           ).toByteArray()
-       }
+        }
+        "Sending write ON event via controller" {
+            writeEvent(Common.XFF)
+            data.size shouldBe 1
+            data[0] shouldBe ubyteArrayOf(
+                0x51u, 0x42u, 0x55u, 0x53u, 0x00u, 0x00u, 0x00u, 0x00u,
+                0x00u, 0xffu, 0x00u, 0x06u, 0x2au, 0xb8u, 0x07u, 0x02u,
+                0x00u, 0xffu, 0x23u
+            ).toByteArray()
+        }
     }
 }
 

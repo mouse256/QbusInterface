@@ -24,6 +24,7 @@ enum class DataTypeId(val id: Byte) {
     EVENT(0x35.toByte()),
     ADDRESS_STATUS(0x38.toByte()),
     SD_DATA(0x44.toByte()),
+    RELOGIN(0x7F.toByte()),
 }
 
 class DataParseException(msg: String) : Exception(msg) {

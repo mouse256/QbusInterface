@@ -252,10 +252,11 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         val type = cmdArray[1] and 0x7F.toByte()
 
         try {
-            val dataType = when (login) {
+            val dataType: DataType? = when (login) {
                 true -> when (type) {
                     DataTypeId.PASSWORD_VERIFY.id -> PasswordVerify(cmdArray)
                     DataTypeId.STRING_DATA.id -> StringData(cmdArray)
+                    DataTypeId.RELOGIN.id -> Relogin()
                     else -> throw DataParseException(
                         "unknown loginmsg type 0x" + Common.byteToHex(type) + " -- "
                                 + Common.bytesToHex(cmdArray)
@@ -268,14 +269,21 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
                     DataTypeId.EVENT.id -> Event(cmdArray)
                     DataTypeId.FAT_DATA.id -> FatData(cmdArray)
                     DataTypeId.SD_DATA.id -> SDData.parse(cmdArray)
-                    else -> throw DataParseException(
-                        "unknown msg type 0x" + Common.byteToHex(type) + " -- "
-                                + Common.bytesToHex(cmdArray)
-                    )
+                    else -> {
+                        if (LOG.isDebugEnabled()) {
+                            LOG.debug("Ingoring unknown msg type 0x{} -- {}",Common.byteToHex(type),
+                                     Common.bytesToHex(cmdArray))
+                        } else {
+                            LOG.info("Ingoring unknown msg type 0x{}",Common.byteToHex(type))
+                        }
+                        null
+                    }
                 }
             }
-            LOG.info("Parsed type: {}", dataType.typeId)
-            listener.onEvent(dataType)
+            dataType?.run {
+                LOG.info("Parsed type: {}", dataType.typeId)
+                listener.onEvent(dataType)
+            }
         } catch (ex: DataParseException) {
             LOG.warn("Parsing error")
             listener.onParseException(ex)

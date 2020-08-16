@@ -1,74 +1,68 @@
 package org.muizenhol.qbus
 
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.muizenhol.qbus.datatype.*
+import org.muizenhol.qbus.exception.InvalidSerialException
+import org.muizenhol.qbus.exception.LoginException
+import org.muizenhol.qbus.exception.QbusException
 import org.muizenhol.qbus.sddata.SdDataParser
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
-import java.lang.Integer.parseInt
 import java.lang.invoke.MethodHandles
 
 class Controller private constructor(
     private val username: String,
     private val password: String,
     private val serial: String,
-    private val host: String?,
+    private val host: String,
     private val port: Int,
-    private val onready: (DataHandler) -> Unit
+    private val exceptionHandler: (QbusException) -> Unit,
+    private val stateChangeHandler: ((State) -> Unit) = {},
+    private val onready: (DataHandler) -> Unit,
+    private val connectionCreator: (String, Int, ServerConnection.Listener) -> ServerConnection
 ) : ServerConnection.Listener, AutoCloseable {
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+        private val serverConnectionCreator: (host: String, port: Int, listener: ServerConnection.Listener) -> ServerConnection =
+            { host, port, listener ->
+                ServerConnection(host, port, listener)
+            }
     }
 
-    private lateinit var conn: ServerConnection
+    private var conn: ServerConnection = connectionCreator.invoke(host, port, this)
     private var state = State.INIT
     private var downloader: Downloader? = null
     private var stateFetcher: StateFetcher? = null
-    private var stateChangeListener: ((State) -> Unit)? = null
     var dataHandler: DataHandler? = null
 
-    val job = CompletableDeferred<Unit>()
-
-
     constructor(
-        serial: String, username: String, password: String, host: String,
-        onready: (DataHandler) -> Unit,
-        port: Int = 8446
+        serial: String,
+        username: String,
+        password: String,
+        host: String,
+        exceptionHandler: (QbusException) -> Unit,
+        stateChangeHandler: ((State) -> Unit) = {},
+        onready: (DataHandler) -> Unit = {},
+        port: Int = 8446,
+        connectionCreator: (String, Int, ServerConnection.Listener) -> ServerConnection = serverConnectionCreator
     ) :
-            this(username, password, serial, host, port, onready) {
-        initServerConnection()
-    }
-
-    constructor(
-        serial: String, username: String, password: String, connection: ServerConnection,
-        onready: (DataHandler) -> Unit
-    ) :
-            this(username, password, serial, null, 0, onready) {
-        conn = connection
-    }
-
-    private fun initServerConnection() {
-        val h = host ?: throw IllegalStateException("Can't restart server connection")
-        conn = ServerConnection(h, port, this)
-    }
-
-    fun test(x: Int, s: String) {
-        when (x) {
-            parseInt(s) -> print("s encodes x")
-            else -> print("s does not encode x")
-        }
-    }
+            this(
+                username,
+                password,
+                serial,
+                host,
+                port,
+                exceptionHandler,
+                stateChangeHandler,
+                onready,
+                connectionCreator
+            )
 
     override fun onConnectionClosed() {
-        LOG.info("Restarting connection")
-        try {
-            //try to close again, just in case not all resources were cleaned
-            conn.close()
-        } catch (e: Exception) {
-            //Don't care
-        }
-        initServerConnection()
-        run2()
+        LOG.info("Restarting connection as connection close is detected")
+        restart()
     }
 
     override fun onEvent(event: DataType) {
@@ -79,8 +73,8 @@ class Controller private constructor(
                     if (state == State.WAIT_FOR_VERSION) {
                         if (!event.serial.equals(serial)) {
                             LOG.error("Invalid serial")
-                            job.completeExceptionally(
-                                RuntimeException(
+                            exceptionHandler.invoke(
+                                InvalidSerialException(
                                     "Invalid serial, got " + event.serial + " expected " + serial
                                 )
                             )
@@ -99,7 +93,7 @@ class Controller private constructor(
                             conn.writeControllerOptions()
                         } else {
                             LOG.error("Login error")
-                            job.completeExceptionally(RuntimeException("Login error"))
+                            exceptionHandler.invoke(LoginException("Login error"))
                         }
                     } else {
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
@@ -153,19 +147,20 @@ class Controller private constructor(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+                is Relogin -> {
+                    restart()
+                }
                 else -> {
                     LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                 }
             }
         } catch (ex: Exception) {
-            LOG.error("Exception in parsing data", ex)
-            job.completeExceptionally(ex)
+            LOG.warn("Exception in parsing data", ex)
         }
     }
 
     override fun onParseException(ex: DataParseException) {
-        LOG.error("Parse exception", ex)
-        job.completeExceptionally(ex)
+        LOG.warn("Parse exception", ex)
     }
 
     enum class State {
@@ -241,7 +236,7 @@ class Controller private constructor(
     private fun updateState(newState: State) {
         LOG.info("Updating state {} -> {}", state, newState)
         state = newState
-        stateChangeListener?.invoke(newState)
+        stateChangeHandler.invoke(newState)
     }
 
     fun setNewState(output: SdDataStruct.Output) {
@@ -262,18 +257,28 @@ class Controller private constructor(
         }
     }
 
+    private fun restart() {
+        LOG.info("Restarting login")
+        try {
+            //try to close again, just in case not all resources were cleaned
+            conn.close()
+        } catch (e: Exception) {
+            //Don't care
+        }
+        val ctrl = this
+        GlobalScope.launch {
+            delay(5_000)
+            conn = connectionCreator.invoke(host, port, ctrl)
+            start()
+        }
+    }
+
     override fun close() {
         conn.close()
-        job.complete(Unit)
     }
 
-    fun run(stateChangeListener: ((State) -> Unit)? = null): CompletableDeferred<Unit> {
-        this.stateChangeListener = stateChangeListener
-        run2()
-        return job
-    }
-
-    private fun run2() {
+    fun start() {
+        LOG.info("Start")
         conn.startDataReader()
         conn.readWelcome()
         Thread.sleep(1000)

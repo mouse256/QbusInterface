@@ -26,7 +26,8 @@ class QbusVerticle(
 
     init {
         controller = Controller(serial, username, password, host,
-            { dataHandler -> vertx.runOnContext { onControllerReady(dataHandler) } })
+            { exception -> LOG.error("Exception", exception) },
+            onready = { dataHandler -> vertx.runOnContext { onControllerReady(dataHandler) } })
     }
 
     override fun start() {
@@ -34,7 +35,7 @@ class QbusVerticle(
         LocalOnlyCodec.register(vertx, StatusRequest::class.java)
         consumerStatus = vertx.eventBus().localConsumer(ADDRESS_STATUS, this::handleStatusRequest)
         consumer = vertx.eventBus().localConsumer(ADDRESS, this::handleRequest)
-        controller.run()
+        controller.start()
     }
 
     override fun stop() {

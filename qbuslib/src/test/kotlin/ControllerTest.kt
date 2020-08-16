@@ -1,6 +1,5 @@
 import com.nhaarman.mockitokotlin2.doAnswer
 import com.nhaarman.mockitokotlin2.mock
-import com.nhaarman.mockitokotlin2.spy
 import io.kotlintest.TestCase
 import io.kotlintest.TestResult
 import io.kotlintest.specs.StringSpec
@@ -13,8 +12,10 @@ import org.muizenhol.qbus.Common
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.datatype.*
+import org.muizenhol.qbus.exception.InvalidSerialException
+import org.muizenhol.qbus.exception.LoginException
+import org.muizenhol.qbus.exception.QbusException
 import org.muizenhol.qbus.sddata.SdDataJson
-import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayOutputStream
 import java.lang.invoke.MethodHandles
@@ -48,8 +49,12 @@ class ControllerTest : StringSpec() {
         placeId = 0, //TODO
         iconNr = 1
     )
+    private var stateHandler: (Controller.State) -> Unit = {}
+    private var exceptionHandler: (QbusException) -> Unit = {}
 
     override fun beforeTest(testCase: TestCase) {
+        stateHandler = { _ -> }
+        exceptionHandler = { ex -> LOG.error("Unhandled exception", ex) }
         loginOK = true
         serial = serialDefault
         prepareSDData()
@@ -81,7 +86,11 @@ class ControllerTest : StringSpec() {
                 handleGetStatus(invocation.getArgument(0))
             }
         }
-        controller = Controller(serialDefault, "username", "password", serverConnection,{})
+        controller = Controller(serialDefault, "username", "password", "localhost",
+            { exception -> exceptionHandler.invoke(exception) },
+            { stateUpdate -> stateHandler.invoke(stateUpdate) },
+            connectionCreator = {_, _, _ -> serverConnection}
+        )
     }
 
     override fun afterTest(testCase: TestCase, result: TestResult) {
@@ -145,26 +154,48 @@ class ControllerTest : StringSpec() {
         }
     }
 
+    fun startAndWaitForReady(): CompletableDeferred<Unit> {
+        val waiting = CompletableDeferred<Unit>()
+        stateHandler = { state ->
+            if (state == Controller.State.READY) {
+                waiting.complete(Unit)
+            }
+        }
+        exceptionHandler = { exception ->
+            run {
+                waiting.completeExceptionally(exception)
+            }
+        }
+        controller.start()
+        return waiting
+    }
+
     init {
         "SunnyDay" {
             LOG.info("OK")
-            sunny { controller.close() }.await()
+            val waiting = CompletableDeferred<Unit>()
+            sunny {
+                controller.close()
+                waiting.complete(Unit)
+            }
+            waiting.await()
         }
         "LoginError" {
             loginOK = false
-            val cf = controller.run()
-            val ex = assertThrows<RuntimeException> { runBlocking { cf.await() } }
+            val cf = startAndWaitForReady()
+            val ex = assertThrows<LoginException> { runBlocking { cf.await() } }
             assertThat(ex.message, equalTo("Login error"))
         }
         "InvalidSerial" {
             serial = "050607"
-            val cf = controller.run()
-            val ex = assertThrows<RuntimeException> { runBlocking { cf.await() } }
+            val cf = startAndWaitForReady()
+            val ex = assertThrows<InvalidSerialException> { runBlocking { cf.await() } }
             assertThat(ex.message, equalTo("Invalid serial, got 050607 expected 010203"))
         }
         "SunnyDayWithEvents" {
             LOG.info("OK")
             controller.use {
+                val waiting = CompletableDeferred<Unit>()
                 sunny {
                     runBlocking {
                         LOG.info("V1")
@@ -186,23 +217,37 @@ class ControllerTest : StringSpec() {
                         assertThat(controller.dataHandler!!.data.outputs[outOnOff1.id]!!.value, equalTo(0xFF.toByte()))
                         LOG.info("V6")
                         controller.close()
+                        waiting.complete(Unit)
                     }
-                }.await()
+                }
+                waiting.await()
             }
+        }
+        "SunnyDayWithRelogin" {
+            LOG.info("OK")
+            val waiting = CompletableDeferred<Unit>()
+            var readyCount = 0;
+            controller.use {
+                sunny {
+                    readyCount++
+                    if (readyCount == 1) {
+                        sendEvent(Relogin())
+                    }
+                    else {
+                        waiting.complete(Unit)
+                    }
+                }
+            }
+            waiting.await()
         }
     }
 
-    private fun sunny(ready: () -> Unit): CompletableDeferred<Unit> {
-        val job = controller.job
-        controller.run { state ->
+    private fun sunny(ready: () -> Unit) {
+        stateHandler = { state ->
             if (state == Controller.State.READY) {
-                try {
-                    ready.invoke()
-                } catch (t: Throwable) {
-                    job.completeExceptionally(t)
-                }
+                ready.invoke()
             }
         }
-        return job
+        controller.start()
     }
 }
