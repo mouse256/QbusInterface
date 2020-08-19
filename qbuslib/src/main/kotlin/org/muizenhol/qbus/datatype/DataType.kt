@@ -27,5 +27,4 @@ enum class DataTypeId(val id: Byte) {
     RELOGIN(0x7F.toByte()),
 }
 
-class DataParseException(msg: String) : Exception(msg) {
-}
+class DataParseException(msg: String) : Exception(msg)

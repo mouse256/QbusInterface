@@ -24,6 +24,7 @@ class ControllerHandler {
 
 
     @PostConstruct
+    @Suppress("unused")
     fun create() {
         LOG.info("creating vertx")
         vertx = Vertx.vertx()
@@ -57,6 +58,7 @@ class ControllerHandler {
     }
 
     @PreDestroy
+    @Suppress("unused")
     fun destroy() {
         LOG.info("Destroying")
         unregisterVertxCodecs(vertx)

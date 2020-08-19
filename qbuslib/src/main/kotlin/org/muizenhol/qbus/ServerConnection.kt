@@ -29,7 +29,6 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         const val START_BYTE: Byte = 0x2A //*
         private const val BYTE_MSG: Byte = 0xFF.toByte()
         private const val BYTE_LOGIN: Byte = 0xFA.toByte()
-        private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
     }
 
     private val clientSocket = socket
@@ -148,7 +147,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     }
 
     private fun getEndPosition(msg: ByteArray, num: Int): Int {
-        var found = 0;
+        var found = 0
         for (i in msg.indices) {
             if (msg[i] == STOP_BYTE) {
                 if (found == num) {
@@ -270,7 +269,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
                     DataTypeId.FAT_DATA.id -> FatData(cmdArray)
                     DataTypeId.SD_DATA.id -> SDData.parse(cmdArray)
                     else -> {
-                        if (LOG.isDebugEnabled()) {
+                        if (LOG.isDebugEnabled) {
                             LOG.debug("Ingoring unknown msg type 0x{} -- {}",Common.byteToHex(type),
                                      Common.bytesToHex(cmdArray))
                         } else {
@@ -297,7 +296,4 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         running = false
     }
 
-    fun triggerReadError() {
-        inStream.close()
-    }
 }

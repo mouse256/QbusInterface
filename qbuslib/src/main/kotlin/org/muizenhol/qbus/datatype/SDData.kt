@@ -1,7 +1,6 @@
 package org.muizenhol.qbus.datatype
 
 import org.muizenhol.qbus.Common
-import org.muizenhol.qbus.ServerConnection
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 import java.nio.charset.Charset

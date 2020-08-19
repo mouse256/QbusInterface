@@ -2,6 +2,7 @@ package org.muizenhol.qbus.sddata
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.muizenhol.qbus.Common
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -10,9 +11,9 @@ import java.lang.invoke.MethodHandles
 import java.util.zip.ZipInputStream
 
 
-class SdDataParser() {
+class SdDataParser {
     companion object {
-        val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+        val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
     var data = ByteArray(0)

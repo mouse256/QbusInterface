@@ -3,12 +3,13 @@ package org.muizenhol.qbus
 import org.muizenhol.qbus.datatype.AddressStatus
 import org.muizenhol.qbus.datatype.Event
 import org.muizenhol.qbus.sddata.SdDataStruct
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
 class DataHandler(val data: SdDataStruct) {
     companion object {
-        val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+        val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
     var listener: (String, SdDataStruct.Output) -> Unit = { _, _ -> }
@@ -60,12 +61,6 @@ class DataHandler(val data: SdDataStruct) {
 
     fun update(event: Event) {
         update(event.address, event.data)
-    }
-
-    fun update(id: Int, value: Byte) {
-        data.outputs.get(id)?.let { out ->
-            updateValue(out, value)
-        }
     }
 
 

@@ -1,6 +1,5 @@
 package org.muizenhol.qbus.bridge
 
-import io.vertx.core.Vertx
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -37,7 +36,7 @@ class ExampleResource {
     @GET
     @Path("readerror")
     @Produces(MediaType.TEXT_PLAIN)
-    fun readError(): Unit {
+    fun readError() {
         LOG.info("Triggering read error")
         // return controller.controller.triggerReadError()
     }

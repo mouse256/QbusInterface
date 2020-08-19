@@ -19,6 +19,7 @@ import org.muizenhol.qbus.sddata.SdDataJson
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayOutputStream
 import java.lang.invoke.MethodHandles
+import java.time.Duration
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -58,7 +59,7 @@ class ControllerTest : StringSpec() {
         loginOK = true
         serial = serialDefault
         prepareSDData()
-        serverConnection = mock<ServerConnection> {
+        serverConnection = mock {
             on { writeMsgVersion() } doAnswer {
                 LOG.debug("Mocking version")
                 sendEvent(Version("01.02", serial))
@@ -89,7 +90,9 @@ class ControllerTest : StringSpec() {
         controller = Controller(serialDefault, "username", "password", "localhost",
             { exception -> exceptionHandler.invoke(exception) },
             { stateUpdate -> stateHandler.invoke(stateUpdate) },
-            connectionCreator = {_, _, _ -> serverConnection}
+            connectionCreator = {_, _, _ -> serverConnection},
+            reconnectTimeout = Duration.ZERO,
+            sleepOnStart = Duration.ZERO
         )
     }
 
@@ -226,7 +229,7 @@ class ControllerTest : StringSpec() {
         "SunnyDayWithRelogin" {
             LOG.info("OK")
             val waiting = CompletableDeferred<Unit>()
-            var readyCount = 0;
+            var readyCount = 0
             controller.use {
                 sunny {
                     readyCount++

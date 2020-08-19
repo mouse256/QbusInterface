@@ -1,3 +1,5 @@
+@file:Suppress("BlockingMethodInNonBlockingContext")
+
 import com.nhaarman.mockitokotlin2.mock
 import io.kotlintest.TestCase
 import io.kotlintest.specs.StringSpec

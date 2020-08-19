@@ -37,7 +37,7 @@ class StubbedServerConnection(val onData: (ByteArray) -> Unit) {
             on { write(any<ByteArray>()) } doAnswer {
                 LOG.info("GOT: {}", it)
             }
-            on { write(any<ByteArray>(), any<Int>(), any<Int>()) } doAnswer {
+            on { write(any(), any(), any()) } doAnswer {
                 val data2 = it.getArgument<ByteArray>(0)
                 val from = it.getArgument<Int>(1)
                 val to = it.getArgument<Int>(2)

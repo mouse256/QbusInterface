@@ -33,6 +33,7 @@ class SendingTest : StringSpec() {
         ctrl.close()
     }
 
+    @Suppress("unused")
     private fun bytesToHex(bytes: ByteArray): String {
         val hexChars = CharArray(bytes.size * 6)
         for (j in bytes.indices) {

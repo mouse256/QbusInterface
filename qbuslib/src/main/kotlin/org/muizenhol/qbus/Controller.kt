@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package org.muizenhol.qbus
 
 import kotlinx.coroutines.GlobalScope
@@ -11,17 +13,20 @@ import org.muizenhol.qbus.sddata.SdDataParser
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
+import java.time.Duration
 
-class Controller private constructor(
+class Controller(
+    private val serial: String,
     private val username: String,
     private val password: String,
-    private val serial: String,
     private val host: String,
-    private val port: Int,
     private val exceptionHandler: (QbusException) -> Unit,
     private val stateChangeHandler: ((State) -> Unit) = {},
-    private val onready: (DataHandler) -> Unit,
-    private val connectionCreator: (String, Int, ServerConnection.Listener) -> ServerConnection
+    private val onReady: (DataHandler) -> Unit = {},
+    private val port: Int = 8446,
+    private val connectionCreator: (String, Int, ServerConnection.Listener) -> ServerConnection = serverConnectionCreator,
+    private val reconnectTimeout: Duration = Duration.ofMinutes(1),
+    private val sleepOnStart: Duration = Duration.ofSeconds(1)
 ) : ServerConnection.Listener, AutoCloseable {
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
@@ -36,29 +41,6 @@ class Controller private constructor(
     private var downloader: Downloader? = null
     private var stateFetcher: StateFetcher? = null
     var dataHandler: DataHandler? = null
-
-    constructor(
-        serial: String,
-        username: String,
-        password: String,
-        host: String,
-        exceptionHandler: (QbusException) -> Unit,
-        stateChangeHandler: ((State) -> Unit) = {},
-        onready: (DataHandler) -> Unit = {},
-        port: Int = 8446,
-        connectionCreator: (String, Int, ServerConnection.Listener) -> ServerConnection = serverConnectionCreator
-    ) :
-            this(
-                username,
-                password,
-                serial,
-                host,
-                port,
-                exceptionHandler,
-                stateChangeHandler,
-                onready,
-                connectionCreator
-            )
 
     override fun onConnectionClosed() {
         LOG.info("Restarting connection as connection close is detected")
@@ -189,7 +171,7 @@ class Controller private constructor(
                 parser.parse()?.let { d ->
                     LOG.info("READY!!!")
                     dataHandler = DataHandler(d)
-                    onready(dataHandler!!)
+                    onReady(dataHandler!!)
                 }
                 stateFetcher = StateFetcher()
                 stateFetcher!!.start()
@@ -202,7 +184,7 @@ class Controller private constructor(
         }
     }
 
-    private inner class StateFetcher() {
+    private inner class StateFetcher {
         var currentItem = 0
         val addressList: List<Byte>
 
@@ -258,7 +240,7 @@ class Controller private constructor(
     }
 
     private fun restart() {
-        LOG.info("Restarting login")
+        LOG.info("Restarting login in {}", reconnectTimeout)
         try {
             //try to close again, just in case not all resources were cleaned
             conn.close()
@@ -267,7 +249,8 @@ class Controller private constructor(
         }
         val ctrl = this
         GlobalScope.launch {
-            delay(5_000)
+            delay(reconnectTimeout.toMillis())
+            LOG.info("Restarting login now")
             conn = connectionCreator.invoke(host, port, ctrl)
             start()
         }
@@ -281,13 +264,10 @@ class Controller private constructor(
         LOG.info("Start")
         conn.startDataReader()
         conn.readWelcome()
-        Thread.sleep(1000)
+        Thread.sleep(sleepOnStart.toMillis())
         updateState(State.WAIT_FOR_VERSION)
         conn.writeMsgVersion()
     }
 
-    fun triggerReadError() {
-        conn.triggerReadError()
-    }
 }
 

@@ -27,7 +27,7 @@ class QbusVerticle(
     init {
         controller = Controller(serial, username, password, host,
             { exception -> LOG.error("Exception", exception) },
-            onready = { dataHandler -> vertx.runOnContext { onControllerReady(dataHandler) } })
+            onReady = { dataHandler -> vertx.runOnContext { onControllerReady(dataHandler) } })
     }
 
     override fun start() {

@@ -66,7 +66,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         mqttClient.connect(mqttPort, mqttHost) { ar ->
             if (ar.failed()) {
                 LOG.warn("MQTT connection failed, retrying in 60 s", ar.cause())
-                vertx.setTimer(Duration.ofSeconds(60).toMillis()) { _ -> connectMqtt(onConnected) }
+                vertx.setTimer(Duration.ofSeconds(60).toMillis()) { connectMqtt(onConnected) }
             } else {
                 LOG.info("MQTT connected")
                 onConnected.invoke()

@@ -3,7 +3,6 @@ package org.muizenhol.qbus.datatype
 import org.muizenhol.qbus.Common
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
-import kotlin.experimental.and
 
 class AddressStatus(
     val address: Byte,
@@ -22,7 +21,7 @@ class AddressStatus(
             val address = cmdArray[2]
             val subAddress = cmdArray[3] //0xFF = all
             if (!write && cmdArray[5] != 0x00.toByte()) {
-                throw DataParseException("Invalid AddressStatus message");
+                throw DataParseException("Invalid AddressStatus message")
             }
             val size = cmdArray[6]
             val data = cmdArray.copyOfRange(8, 8 + size)
