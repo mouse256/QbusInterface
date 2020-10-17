@@ -79,13 +79,11 @@ class ControllerHandler {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
 
         fun registerVertxCodecs(vertx: Vertx) {
-            LocalOnlyCodec.register(vertx, MqttVerticle.MqttItem::class.java)
-            LocalOnlyCodec.register(vertx, MqttVerticle.MqttReceiveItem::class.java)
+            LocalOnlyCodec.register(vertx, QbusVerticle.MqttItem::class.java)
         }
 
         fun unregisterVertxCodecs(vertx: Vertx) {
-            LocalOnlyCodec.unregister(vertx, MqttVerticle.MqttItem::class.java)
-            LocalOnlyCodec.unregister(vertx, MqttVerticle.MqttReceiveItem::class.java)
+            LocalOnlyCodec.unregister(vertx, QbusVerticle.MqttItem::class.java)
         }
     }
 }

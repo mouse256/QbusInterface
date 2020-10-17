@@ -7,3 +7,4 @@ out.json
 *.tcpdump
 *.pcap
 buildAndPublish.sh
+buildAndRun.sh

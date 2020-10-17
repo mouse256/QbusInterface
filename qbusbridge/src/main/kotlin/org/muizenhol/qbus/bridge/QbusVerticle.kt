@@ -22,7 +22,7 @@ class QbusVerticle(
     private val controller: Controller
     var dataHandler: DataHandler? = null
     lateinit var consumerStatus: MessageConsumer<StatusRequest>
-    lateinit var consumer: MessageConsumer<MqttVerticle.MqttReceiveItem>
+    lateinit var consumer: MessageConsumer<MqttItem>
 
     init {
         controller = Controller(serial, username, password, host,
@@ -34,12 +34,13 @@ class QbusVerticle(
         LOG.info("Starting")
         LocalOnlyCodec.register(vertx, StatusRequest::class.java)
         consumerStatus = vertx.eventBus().localConsumer(ADDRESS_STATUS, this::handleStatusRequest)
-        consumer = vertx.eventBus().localConsumer(ADDRESS, this::handleRequest)
+        consumer = vertx.eventBus().localConsumer(ADDRESS_UPDATE_QBUS_ITEM, this::handleQbusUpdateItem)
         controller.start()
     }
 
     override fun stop() {
         LocalOnlyCodec.unregister(vertx, StatusRequest::class.java)
+        consumer.unregister()
         controller.close()
     }
 
@@ -79,57 +80,60 @@ class QbusVerticle(
      */
     private fun onDataUpdate(serial: String, data: SdDataStruct.Output) {
         try {
-            LOG.info("update for {}({}) to {}", data.name, serial, data.value)
-            vertx.eventBus().send(MqttVerticle.ADDRESS, MqttVerticle.MqttItem(serial, data))
+            data.value?.let { payload ->
+                LOG.info("update for {}({}) to {}", data.name, serial, payload)
+                val type = Type.fromQbusInternal(data.type)
+                type?.run {
+                    vertx.eventBus().send(MqttVerticle.ADDRESS, MqttItem(serial, type, data.id, payload))
+                }
+            }
         } catch (ex: Exception) {
             LOG.warn("Error processing qbus data", ex)
         }
     }
 
-    private fun handleRequest(msg: Message<MqttVerticle.MqttReceiveItem>) {
-        LOG.info("Handle update from mqtt request: {}", msg)
+    private fun handleQbusUpdateItem(msg: Message<MqttItem>) {
+        val item = msg.body()
         if (dataHandler == null) {
             LOG.debug("DataHandler is not yet initalized")
-        } else {
-            msg.body().let { data ->
-                if (dataHandler!!.data.serialNumber != data.serial) {
-                    LOG.debug("Got msg for another controller")
-                    return
-                }
-                when (data.type) {
-                    "switch" -> handleSwitchUpdate(data.id, data.payload)
-                    else -> LOG.warn("Can't handle type {}", data.type)
-                }
-            }
+            return
         }
-
-    }
-
-    private fun handleSwitchUpdate(id: Int, payload: String) {
-        val out = dataHandler?.getOutput(id)
+        if (dataHandler!!.data.serialNumber != item.serial) {
+            LOG.debug("Got msg for another controller")
+            return
+        }
+        val out = dataHandler?.getOutput(item.id)
         if (out != null) {
-            when (payload) {
-                "ON" -> 0XFF.toByte()
-                "OFF" -> 0X00.toByte()
-                else -> null
-            }?.let {
-                //value -> dataHandler?.update(id, value)
-                out.value = it
-                controller.setNewState(out)
-            }
+            out.value = item.payload
+            controller.setNewState(out)
         } else {
-            LOG.warn("can't find output with id {}", id)
+            LOG.warn("can't find output with id {}", item.payload)
         }
     }
-
 
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         val ADDRESS_STATUS = "ADDRESS_QBUS_VERTICLE_STATUS"
-        val ADDRESS = "ADDRESS_QBUS_VERTICLE"
+        val ADDRESS_UPDATE_QBUS_ITEM = "ADDRESS_UPDATE_QBUS_ITEM"
     }
 
     enum class StatusRequest {
         SEND_ALL_STATES
     }
+
+    data class MqttItem(val serial: String, val type: Type, val id: Int, val payload: Byte)
+
+    enum class Type {
+        ON_OFF;
+
+        companion object {
+            fun fromQbusInternal(intType: SdDataStruct.Type): Type? {
+                return when (intType) {
+                    SdDataStruct.Type.ON_OFF -> ON_OFF
+                    else -> null
+                }
+            }
+        }
+    }
+
 }

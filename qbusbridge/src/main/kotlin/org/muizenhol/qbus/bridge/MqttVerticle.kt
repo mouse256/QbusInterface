@@ -8,7 +8,6 @@ import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
-import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
@@ -18,7 +17,7 @@ import java.util.regex.Pattern
 
 class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle() {
     lateinit var mqttClient: MqttClient
-    lateinit var consumer: MessageConsumer<MqttItem>
+    lateinit var consumer: MessageConsumer<QbusVerticle.MqttItem>
     var started = false
 
     override fun start() {
@@ -38,7 +37,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             LOG.info("Mqtt closed, restart")
             restart()
         }
-        mqttClient.exceptionHandler{ex ->
+        mqttClient.exceptionHandler { ex ->
             LOG.warn("Exception", ex)
             restart()
         }
@@ -74,39 +73,41 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         }
     }
 
-    private fun handle(msg: Message<MqttItem>) {
+    private fun handle(msg: Message<QbusVerticle.MqttItem>) {
         if (!started) {
             LOG.debug("Got msg but MQTT is not yet started")
             return
         }
-        sendToMqtt(msg.body().serial, msg.body().data)
+        sendToMqtt(msg.body())
     }
 
     /**
      * Qbus to MQTT
      */
-    private fun sendToMqtt(serial: String, data: SdDataStruct.Output) {
-        LOG.info("update for {} to {}", data.name, data.value)
+    private fun sendToMqtt(item: QbusVerticle.MqttItem) {
+        LOG.info("update for {} to {}", item.id, item.payload)
         if (!mqttClient.isConnected) {
             LOG.warn("MQTT is not connected, ignoring")
             return
         }
-        if (data.type == SdDataStruct.Type.ON_OFF) {
-            //TODO add support for more types
-            when (data.value) {
-                0x00.toByte() -> "OFF"
-                0xFF.toByte() -> "ON"
-                else -> null
-            }?.let { v ->
-                LOG.info("MQTT Publish switch to {}", v)
-                publish(serial, data, "switch", Buffer.buffer(v))
+        when (item.type) {
+            QbusVerticle.Type.ON_OFF -> {
+                when (item.payload) {
+                    0x00.toByte() -> "0"
+                    0xFF.toByte() -> "255"
+                    else -> null
+                }?.let { v ->
+                    LOG.info("MQTT Publish switch to {}", v)
+                    publish(item.serial, item.id, "switch", Buffer.buffer(v))
+                }
             }
+            //TODO add support for more types
         }
     }
 
-    private fun publish(serial: String, data: SdDataStruct.Output, type: String, payload: Buffer) {
+    private fun publish(serial: String, id: Int, type: String, payload: Buffer) {
         mqttClient.publish(
-            "qbus/" + serial + "/" + type + "/" + data.id + "/state",
+            "qbus/" + serial + "/" + type + "/" + id + "/state",
             payload,
             MqttQoS.AT_LEAST_ONCE,
             false,
@@ -136,13 +137,33 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             val id = matcher.group(3).toInt()
             val payload = msg.payload().toString(StandardCharsets.UTF_8)
             LOG.info("Got {} data for {}: {}", type, id, payload)
-            val item = MqttReceiveItem(serial, type, id, payload)
-            vertx.eventBus().send(QbusVerticle.ADDRESS, item)
+            toQbus(serial, type, payload, id)
         } else {
             LOG.info("Topic not matched")
         }
     }
 
+    private fun toQbus(serial: String, type: String, payload: String, id: Int) {
+        val payloadQbus: Pair<QbusVerticle.Type, Byte>? = when (type) {
+            "switch" -> payloadToQbusSwitch(payload)
+            else -> {
+                LOG.warn("Can't handle type {}", type)
+                null
+            }
+        }
+        payloadQbus?.run {
+            val item = QbusVerticle.MqttItem(serial, payloadQbus.first, id, payloadQbus.second)
+            vertx.eventBus().send(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM, item)
+        }
+    }
+
+    private fun payloadToQbusSwitch(payload: String): Pair<QbusVerticle.Type, Byte>? {
+        return when (payload) {
+            "ON" -> Pair(QbusVerticle.Type.ON_OFF, 0XFF.toByte())
+            "OFF" -> Pair(QbusVerticle.Type.ON_OFF, 0X00.toByte())
+            else -> null
+        }
+    }
 
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
@@ -150,6 +171,4 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         val ADDRESS = "address_mqtt_verticle"
     }
 
-    data class MqttItem(val serial: String, val data: SdDataStruct.Output)
-    data class MqttReceiveItem(val serial: String, val type: String, val id: Int, val payload: String)
 }
