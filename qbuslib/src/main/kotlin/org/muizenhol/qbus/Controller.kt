@@ -225,7 +225,9 @@ class Controller(
         LOG.info("sending event to Qbus: {} ({}: {}) -> {}", output.type, output.id, output.name, output.value)
         output.value?.let { value ->
             when (output.type) {
-                SdDataStruct.Type.ON_OFF -> {
+                SdDataStruct.Type.ON_OFF,
+                SdDataStruct.Type.DIMMER1B,
+                SdDataStruct.Type.DIMMER2B-> {
                     val addressStatus = AddressStatus(
                         output.address,
                         output.subAddress,

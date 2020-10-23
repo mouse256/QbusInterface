@@ -4,6 +4,7 @@ import io.quarkus.runtime.Startup
 import io.vertx.core.AsyncResult
 import io.vertx.core.Vertx
 import org.muizenhol.qbus.DataHandler
+import org.muizenhol.qbus.bridge.type.MqttItem
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -79,11 +80,11 @@ class ControllerHandler {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
 
         fun registerVertxCodecs(vertx: Vertx) {
-            LocalOnlyCodec.register(vertx, QbusVerticle.MqttItem::class.java)
+            LocalOnlyCodec.register(vertx, MqttItem::class.java)
         }
 
         fun unregisterVertxCodecs(vertx: Vertx) {
-            LocalOnlyCodec.unregister(vertx, QbusVerticle.MqttItem::class.java)
+            LocalOnlyCodec.unregister(vertx, MqttItem::class.java)
         }
     }
 }

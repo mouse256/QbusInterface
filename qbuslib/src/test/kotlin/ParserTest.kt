@@ -1,6 +1,6 @@
 import com.nhaarman.mockitokotlin2.mock
-import io.kotlintest.TestCase
-import io.kotlintest.specs.StringSpec
+import io.kotest.core.spec.style.StringSpec
+import io.kotest.core.test.TestCase
 import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType

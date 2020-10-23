@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinWithJavaTarget
-
 plugins {
     kotlin("jvm")
     id("org.jetbrains.kotlin.plugin.allopen")
@@ -20,7 +18,10 @@ dependencies {
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
 
-    testImplementation("io.quarkus:quarkus-junit5")
+    //testImplementation("io.quarkus:quarkus-junit5")
+    //testImplementation("io.kotest:kotest-runner-junit5-jvm:4.3.0")
+    testImplementation("io.vertx:vertx-junit5:3.9.+")
+    testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j-impl:2.13.0")
 }
 
 group = "org.acme"
@@ -51,9 +52,14 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
         javaParameters = true
     }
 }
-
-/*
-compileTestKotlin {
-    kotlinOptions.jvmTarget = JavaVersion.VERSION_11
-}*/
+tasks {
+    test {
+        systemProperty("vertx.logger-delegate-factory-class-name", "io.vertx.core.logging.SLF4JLogDelegateFactory")
+    }
+}
+configurations {
+    testRuntimeClasspath {
+        exclude(group = "org.jboss.slf4j")
+    }
+}
 

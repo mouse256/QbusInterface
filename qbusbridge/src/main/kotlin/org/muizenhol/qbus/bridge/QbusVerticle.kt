@@ -7,6 +7,9 @@ import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.DataHandler
+import org.muizenhol.qbus.bridge.type.MqttHandled
+import org.muizenhol.qbus.bridge.type.MqttItem
+import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -33,6 +36,7 @@ class QbusVerticle(
     override fun start() {
         LOG.info("Starting")
         LocalOnlyCodec.register(vertx, StatusRequest::class.java)
+        LocalOnlyCodec.register(vertx, MqttHandled::class.java)
         consumerStatus = vertx.eventBus().localConsumer(ADDRESS_STATUS, this::handleStatusRequest)
         consumer = vertx.eventBus().localConsumer(ADDRESS_UPDATE_QBUS_ITEM, this::handleQbusUpdateItem)
         controller.start()
@@ -40,6 +44,7 @@ class QbusVerticle(
 
     override fun stop() {
         LocalOnlyCodec.unregister(vertx, StatusRequest::class.java)
+        LocalOnlyCodec.unregister(vertx, MqttHandled::class.java)
         consumer.unregister()
         controller.close()
     }
@@ -81,10 +86,11 @@ class QbusVerticle(
     private fun onDataUpdate(serial: String, data: SdDataStruct.Output) {
         try {
             data.value?.let { payload ->
-                LOG.info("update for {}({}) to {}", data.name, serial, payload)
-                val type = Type.fromQbusInternal(data.type)
+                val payloadInt = (payload.toInt() and 0xff)
+                LOG.info("update for {}({}) to {}", data.name, serial, payloadInt)
+                val type = MqttItem.Type.fromQbusInternal(data.type)
                 type?.run {
-                    vertx.eventBus().send(MqttVerticle.ADDRESS, MqttItem(serial, type, data.id, payload))
+                    vertx.eventBus().send(MqttVerticle.ADDRESS, MqttItem(serial, type, data.id, payloadInt))
                 }
             }
         } catch (ex: Exception) {
@@ -98,13 +104,14 @@ class QbusVerticle(
             LOG.debug("DataHandler is not yet initalized")
             return
         }
+        LOG.debug("Update for ({}) {} -> {}", item.type, item.id, item.payload)
         if (dataHandler!!.data.serialNumber != item.serial) {
             LOG.debug("Got msg for another controller")
             return
         }
         val out = dataHandler?.getOutput(item.id)
         if (out != null) {
-            out.value = item.payload
+            out.value = item.payload.toByte()
             controller.setNewState(out)
         } else {
             LOG.warn("can't find output with id {}", item.payload)
@@ -116,24 +123,4 @@ class QbusVerticle(
         val ADDRESS_STATUS = "ADDRESS_QBUS_VERTICLE_STATUS"
         val ADDRESS_UPDATE_QBUS_ITEM = "ADDRESS_UPDATE_QBUS_ITEM"
     }
-
-    enum class StatusRequest {
-        SEND_ALL_STATES
-    }
-
-    data class MqttItem(val serial: String, val type: Type, val id: Int, val payload: Byte)
-
-    enum class Type {
-        ON_OFF;
-
-        companion object {
-            fun fromQbusInternal(intType: SdDataStruct.Type): Type? {
-                return when (intType) {
-                    SdDataStruct.Type.ON_OFF -> ON_OFF
-                    else -> null
-                }
-            }
-        }
-    }
-
 }

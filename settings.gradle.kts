@@ -7,7 +7,7 @@ pluginManagement {
         gradlePluginPortal()
     }
     plugins {
-        id("io.quarkus").version("1.4.2.Final")
+        id("io.quarkus").version("1.8.3.Final")
     }
 }
 rootProject.name = "qbuscomm"

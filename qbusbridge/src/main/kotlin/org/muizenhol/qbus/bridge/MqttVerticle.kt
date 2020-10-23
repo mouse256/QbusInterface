@@ -8,16 +8,20 @@ import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
+import org.muizenhol.qbus.bridge.type.MqttHandled
+import org.muizenhol.qbus.bridge.type.MqttItem
+import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.regex.Pattern
+import kotlin.math.round
 
 class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle() {
     lateinit var mqttClient: MqttClient
-    lateinit var consumer: MessageConsumer<QbusVerticle.MqttItem>
+    lateinit var consumer: MessageConsumer<MqttItem>
     var started = false
 
     override fun start() {
@@ -30,7 +34,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             started = true
             subscribe()
             //when mqtt is started, ask Qbus to send all states
-            vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, QbusVerticle.StatusRequest.SEND_ALL_STATES)
+            vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, StatusRequest.SEND_ALL_STATES)
         }
         consumer = vertx.eventBus().localConsumer(ADDRESS, this::handle)
         mqttClient.closeHandler {
@@ -47,7 +51,9 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         LOG.info("Stopping")
         started = false
         consumer.unregister()
-        mqttClient.disconnect()
+        if (mqttClient.isConnected) {
+            mqttClient.disconnect()
+        }
     }
 
     private fun restart() {
@@ -73,41 +79,59 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         }
     }
 
-    private fun handle(msg: Message<QbusVerticle.MqttItem>) {
+    private fun handle(msg: Message<MqttItem>) {
         if (!started) {
             LOG.debug("Got msg but MQTT is not yet started")
             return
         }
-        sendToMqtt(msg.body())
+        val res = sendToMqtt(msg.body())
+        msg.reply(res)
     }
 
     /**
      * Qbus to MQTT
      */
-    private fun sendToMqtt(item: QbusVerticle.MqttItem) {
+    private fun sendToMqtt(item: MqttItem): MqttHandled {
         LOG.info("update for {} to {}", item.id, item.payload)
         if (!mqttClient.isConnected) {
             LOG.warn("MQTT is not connected, ignoring")
-            return
+            return MqttHandled.MQTT_ERROR
         }
         when (item.type) {
-            QbusVerticle.Type.ON_OFF -> {
+            MqttItem.Type.ON_OFF -> {
                 when (item.payload) {
-                    0x00.toByte() -> "0"
-                    0xFF.toByte() -> "255"
-                    else -> null
-                }?.let { v ->
+                    0x00 -> "0"
+                    0xFF -> "255"
+                    else -> {
+                        LOG.warn("Invalid payload for ON_OFF type. Sensor {}: {}", item.id, item.payload)
+                        return MqttHandled.DATA_ERROR
+                    }
+                }.let { v ->
                     LOG.info("MQTT Publish switch to {}", v)
                     publish(item.serial, item.id, "switch", Buffer.buffer(v))
+                    return MqttHandled.OK
                 }
             }
-            //TODO add support for more types
+            MqttItem.Type.DIMMER -> {
+                val v = item.payload.toString()
+                LOG.info("MQTT Publish dimmer to {}", v)
+                publish(item.serial, item.id, "dimmer", Buffer.buffer(v))
+                return MqttHandled.OK
+            }
+            else -> {
+                //TODO add support for more types
+                return MqttHandled.DATA_TYPE_NOT_SUPPORTED
+            }
         }
     }
 
     private fun publish(serial: String, id: Int, type: String, payload: Buffer) {
+        publish(serial, id, type, payload, "state")
+    }
+
+    private fun publish(serial: String, id: Int, type: String, payload: Buffer, name: String) {
         mqttClient.publish(
-            "qbus/" + serial + "/" + type + "/" + id + "/state",
+            "qbus/" + serial + "/" + type + "/" + id + "/" + name,
             payload,
             MqttQoS.AT_LEAST_ONCE,
             false,
@@ -116,6 +140,8 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             if (ar.failed()) {
                 LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
                 restart()
+            } else {
+                LOG.info("MQTT publish OK")
             }
         }
     }
@@ -144,24 +170,12 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     }
 
     private fun toQbus(serial: String, type: String, payload: String, id: Int) {
-        val payloadQbus: Pair<QbusVerticle.Type, Byte>? = when (type) {
-            "switch" -> payloadToQbusSwitch(payload)
-            else -> {
-                LOG.warn("Can't handle type {}", type)
-                null
+        MqttItem.Type.fromMqtt(type)?.let { t ->
+            t.toQbusInternal(payload)?.let { p ->
+                val item = MqttItem(serial, t, id, p)
+                LOG.debug("Sending to Qbus verticle")
+                vertx.eventBus().send(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM, item)
             }
-        }
-        payloadQbus?.run {
-            val item = QbusVerticle.MqttItem(serial, payloadQbus.first, id, payloadQbus.second)
-            vertx.eventBus().send(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM, item)
-        }
-    }
-
-    private fun payloadToQbusSwitch(payload: String): Pair<QbusVerticle.Type, Byte>? {
-        return when (payload) {
-            "ON" -> Pair(QbusVerticle.Type.ON_OFF, 0XFF.toByte())
-            "OFF" -> Pair(QbusVerticle.Type.ON_OFF, 0X00.toByte())
-            else -> null
         }
     }
 

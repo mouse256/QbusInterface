@@ -1,5 +1,7 @@
 package org.muizenhol.qbus.bridge
 
+import org.muizenhol.qbus.bridge.type.MqttItem
+import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -22,7 +24,7 @@ class ExampleResource {
     @GET
     @Path("update")
     fun updateAll(): String {
-        controller.vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, QbusVerticle.StatusRequest.SEND_ALL_STATES)
+        controller.vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, StatusRequest.SEND_ALL_STATES)
         return "Update-all requested"
     }
 
@@ -50,35 +52,26 @@ class ExampleResource {
         val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
-                .filter { output ->
-                    output.type == SdDataStruct.Type.ON_OFF
-                            || output.type == SdDataStruct.Type.DIMMER2B
-                            || output.type == SdDataStruct.Type.DIMMER1B
-                }
-                .sortedBy { output -> output.name }
-                .forEach { output ->
+                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output.type), output) }
+                .filter { out -> out.first != null }
+                .sortedBy { output -> output.second.name }
+                .forEach { outpair ->
+                    val output = outpair.second
+                    val type = getOpenhabType(output).toLowerCase()
                     out.append("  Thing topic ${formatName("thing", output)} \"${output.name}\" @ \"QBus\" {\n")
                         .append("    Channels:\n")
-                        .append("      Type ").append(getOpenhabType(output).toLowerCase())
+                        .append("      Type ").append(type)
                         .append(" : ${formatName("channel", output)} ")
-                        .append("[ stateTopic=\"qbus/${it.serialNumber}/switch/${output.id}/state\" ")
+                        .append("[ stateTopic=\"qbus/${it.serialNumber}/${type}/${output.id}/state\" ")
                     if (!output.readonly) {
-                        out.append(", commandTopic=\"qbus/${it.serialNumber}/switch/${output.id}/command\"")
+                        out.append(", commandTopic=\"qbus/${it.serialNumber}/${type}/${output.id}/command\"")
                     }
-                    out.append(", ").append(getOpenhabStates(output)).append("]\n")
+                    out.append(", ").append(outpair.first!!.getOpenhabThing()).append("]\n")
                         .append("  }\n")
                 }
         }
         out.append("}\n")
         return out.toString()
-    }
-
-    private fun getOpenhabStates(output: SdDataStruct.Output): String {
-        return when (output.type) {
-            SdDataStruct.Type.ON_OFF -> "on=\"ON\", off=\"OFF\""
-            SdDataStruct.Type.DIMMER1B, SdDataStruct.Type.DIMMER2B -> "min=\"0\", max=\"100\", step=\"0.5\""
-            else -> throw IllegalStateException("Not handled")
-        }
     }
 
     private fun getOpenhabType(output: SdDataStruct.Output): String {
@@ -105,10 +98,12 @@ class ExampleResource {
         val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
-                .filter { output -> output.type == SdDataStruct.Type.ON_OFF }
-                .sortedBy { output -> output.name }
-                .forEach { output ->
-                    out.append("Switch ${formatName("item", output)} \"${output.name}\" ")
+                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output.type), output) }
+                .filter { out -> out.first != null }
+                .sortedBy { output -> output.second.name }
+                .forEach { outPair ->
+                    val output = outPair.second
+                    out.append("${outPair.first!!.getOpenhabItem()} ${formatName("item", output)} \"${output.name}\" ")
                         .append(
                             "{channel=\"mqtt:topic:qbusBroker:${formatName("thing", output)}:${formatName(
                                 "channel",
