@@ -11,6 +11,7 @@ import org.muizenhol.qbus.exception.LoginException
 import org.muizenhol.qbus.exception.QbusException
 import org.muizenhol.qbus.sddata.SdDataParser
 import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutput
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 import java.time.Duration
@@ -221,24 +222,14 @@ class Controller(
         stateChangeHandler.invoke(newState)
     }
 
-    fun setNewState(output: SdDataStruct.Output) {
-        LOG.info("sending event to Qbus: {} ({}: {}) -> {}", output.type, output.id, output.name, output.value)
-        output.value?.let { value ->
-            when (output.type) {
-                SdDataStruct.Type.ON_OFF,
-                SdDataStruct.Type.DIMMER1B,
-                SdDataStruct.Type.DIMMER2B-> {
-                    val addressStatus = AddressStatus(
-                        output.address,
-                        output.subAddress,
-                        data = byteArrayOf(0x00, value),
-                        write = true
-                    )
-                    conn.write(addressStatus)
-                }
-                else -> LOG.warn("Don't know how to handle type " + output.type)
-            }
-        }
+    /**
+     * Request a new state for an item on Qbus.
+     * This function will write a new state of an item to the Qbus controller.
+     * If the state gets accepted, the Qbus controller will publish an event confirming the actual state.
+     */
+    fun requestNewQbusState(output: SdOutput) {
+        LOG.info("sending event to Qbus: {} ({}: {}) -> {}", output.typeName, output.id, output.name, output.printValue())
+        conn.write(output.getAddressStatus())
     }
 
     private fun restart() {

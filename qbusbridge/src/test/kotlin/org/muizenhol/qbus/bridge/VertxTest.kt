@@ -137,8 +137,8 @@ class VertxTest() {
     @Test
     fun testSwitchOff(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/switch/1/state", "0")
-            val item = MqttItem("12345", MqttItem.Type.ON_OFF, 1, 0x00)
+            expectMqtt(vertxContext, "qbus/12345/sensor/switch/1/state", "0")
+            val item = MqttItem("12345", MqttItem.Type.ON_OFF, 1, 0x00, "", "")
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
@@ -146,8 +146,8 @@ class VertxTest() {
     @Test
     fun testSwitchOn(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/54321/switch/2/state", "255")
-            val item = MqttItem("54321", MqttItem.Type.ON_OFF, 2, 0xFF)
+            expectMqtt(vertxContext, "qbus/54321/sensor/switch/2/state", "255")
+            val item = MqttItem("54321", MqttItem.Type.ON_OFF, 2, 0xFF, "", "")
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
@@ -155,7 +155,7 @@ class VertxTest() {
     @Test
     fun testSwitchInvalid(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            val item = MqttItem("54321", MqttItem.Type.ON_OFF, 2, 0x33)
+            val item = MqttItem("54321", MqttItem.Type.ON_OFF, 2, 0x33, "", "")
             send(vertx, vertxContext, item, MqttHandled.DATA_ERROR)
         }
     }
@@ -163,8 +163,8 @@ class VertxTest() {
     @Test
     fun testDimmerOff(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/dimmer/1/state", "0")
-            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0x00)
+            expectMqtt(vertxContext, "qbus/12345/sensor/dimmer/1/state", "0")
+            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0x00, "", "")
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
@@ -172,8 +172,8 @@ class VertxTest() {
     @Test
     fun testDimmerOn(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/dimmer/1/state", "255")
-            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0xFF)
+            expectMqtt(vertxContext, "qbus/12345/sensor/dimmer/1/state", "255")
+            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0xFF, "", "")
             LOG.info("test: {}", item.payload)
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
@@ -182,8 +182,8 @@ class VertxTest() {
     @Test
     fun testDimmer(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/dimmer/1/state", "187")
-            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0xBB)
+            expectMqtt(vertxContext, "qbus/12345/sensor/dimmer/1/state", "187")
+            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0xBB, "", "")
             LOG.info("test: {}", item.payload)
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
@@ -191,7 +191,7 @@ class VertxTest() {
 
     @Test
     fun testDimmerCommandOff(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0)
+        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0, "", "")
         val checkpoint = vertxContext.checkpoint()
         vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) {ar: Message<MqttItem> ->
             if (!expected.equals(ar.body())) {
@@ -200,14 +200,14 @@ class VertxTest() {
             checkpoint.flag()
         }
         start(vertx, vertxContext) {
-            mqttClient!!.publish("qbus/12345/dimmer/1/command",
+            mqttClient!!.publish("qbus/12345/sensor/dimmer/1/command",
                 Buffer.buffer("0"), MqttQoS.AT_LEAST_ONCE, false, false)
         }
     }
 
     @Test
     fun testDimmerCommandOn(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 255)
+        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 255, "", "")
         val checkpoint = vertxContext.checkpoint()
         vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) {ar: Message<MqttItem> ->
             if (!expected.equals(ar.body())) {
@@ -216,14 +216,14 @@ class VertxTest() {
             checkpoint.flag()
         }
         start(vertx, vertxContext) {
-            mqttClient!!.publish("qbus/12345/dimmer/1/command",
+            mqttClient!!.publish("qbus/12345/sensor/dimmer/1/command",
                 Buffer.buffer("255"), MqttQoS.AT_LEAST_ONCE, false, false)
         }
     }
 
     @Test
     fun testDimmerCommandHalf(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 123)
+        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 123, "", "")
         val checkpoint = vertxContext.checkpoint()
         vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) {ar: Message<MqttItem> ->
             if (!expected.equals(ar.body())) {
@@ -232,7 +232,7 @@ class VertxTest() {
             checkpoint.flag()
         }
         start(vertx, vertxContext) {
-            mqttClient!!.publish("qbus/12345/dimmer/1/command",
+            mqttClient!!.publish("qbus/12345/sensor/dimmer/1/command",
                 Buffer.buffer("123.45"), MqttQoS.AT_LEAST_ONCE, false, false)
         }
     }

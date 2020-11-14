@@ -1,11 +1,14 @@
 package org.muizenhol.qbus.bridge.type
 
 import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutput
+import org.muizenhol.qbus.sddata.SdOutputDimmer
+import org.muizenhol.qbus.sddata.SdOutputOnOff
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
-data class MqttItem(val serial: String, val type: Type, val id: Int, val payload: Int) {
+data class MqttItem(val serial: String, val type: Type, val id: Int, val payload: Int, val name: String, val place: String) {
 
     enum class Type {
         ON_OFF,
@@ -53,10 +56,10 @@ data class MqttItem(val serial: String, val type: Type, val id: Int, val payload
         companion object {
             private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
 
-            fun fromQbusInternal(intType: SdDataStruct.Type): Type? {
+            fun fromQbusInternal(intType: SdOutput): Type? {
                 return when (intType) {
-                    SdDataStruct.Type.ON_OFF -> ON_OFF
-                    SdDataStruct.Type.DIMMER1B, SdDataStruct.Type.DIMMER2B -> DIMMER
+                    is SdOutputOnOff -> ON_OFF
+                    is SdOutputDimmer -> DIMMER
                     else -> {
                         LOG.warn("Can't map type from qbus: {}", intType)
                         null

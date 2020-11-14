@@ -3,6 +3,7 @@ package org.muizenhol.qbus.bridge
 import org.muizenhol.qbus.bridge.type.MqttItem
 import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutput
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
@@ -52,7 +53,7 @@ class ExampleResource {
         val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
-                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output.type), output) }
+                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output), output) }
                 .filter { out -> out.first != null }
                 .sortedBy { output -> output.second.name }
                 .forEach { outpair ->
@@ -62,9 +63,9 @@ class ExampleResource {
                         .append("    Channels:\n")
                         .append("      Type ").append(type)
                         .append(" : ${formatName("channel", output)} ")
-                        .append("[ stateTopic=\"qbus/${it.serialNumber}/${type}/${output.id}/state\" ")
+                        .append("[ stateTopic=\"qbus/${it.serialNumber}/sensor/${type}/${output.id}/state\" ")
                     if (!output.readonly) {
-                        out.append(", commandTopic=\"qbus/${it.serialNumber}/${type}/${output.id}/command\"")
+                        out.append(", commandTopic=\"qbus/${it.serialNumber}/sensor/${type}/${output.id}/command\"")
                     }
                     out.append(", ").append(outpair.first!!.getOpenhabThing()).append("]\n")
                         .append("  }\n")
@@ -74,19 +75,21 @@ class ExampleResource {
         return out.toString()
     }
 
-    private fun getOpenhabType(output: SdDataStruct.Output): String {
+    private fun getOpenhabType(output: SdOutput): String {
         if (output.readonly) {
             return "string"
         } else {
-            return when (output.type) {
-                SdDataStruct.Type.ON_OFF -> "Switch"
-                SdDataStruct.Type.DIMMER1B, SdDataStruct.Type.DIMMER2B -> "Dimmer"
-                else -> throw IllegalStateException("Not handled")
+            val type = MqttItem.Type.fromQbusInternal(output)
+            if (type != null) {
+                return type.getOpenhabItem();
+            }
+            else {
+                throw IllegalStateException("Not handled")
             }
         }
     }
 
-    private fun formatName(type: String, output: SdDataStruct.Output): String {
+    private fun formatName(type: String, output: SdOutput): String {
         return "qbus_${type}_" + output.name.replace(" ", "_")
     }
 
@@ -98,7 +101,7 @@ class ExampleResource {
         val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
-                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output.type), output) }
+                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output), output) }
                 .filter { out -> out.first != null }
                 .sortedBy { output -> output.second.name }
                 .forEach { outPair ->

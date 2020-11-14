@@ -1,5 +1,6 @@
 package org.muizenhol.qbus.bridge
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.buffer.Buffer
@@ -108,14 +109,14 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     }
                 }.let { v ->
                     LOG.info("MQTT Publish switch to {}", v)
-                    publish(item.serial, item.id, "switch", Buffer.buffer(v))
+                    publish(item,  "switch", v)
                     return MqttHandled.OK
                 }
             }
             MqttItem.Type.DIMMER -> {
                 val v = item.payload.toString()
                 LOG.info("MQTT Publish dimmer to {}", v)
-                publish(item.serial, item.id, "dimmer", Buffer.buffer(v))
+                publish(item, "dimmer", v)
                 return MqttHandled.OK
             }
             else -> {
@@ -125,14 +126,16 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         }
     }
 
-    private fun publish(serial: String, id: Int, type: String, payload: Buffer) {
-        publish(serial, id, type, payload, "state")
-    }
+    private val states = mutableMapOf<String, MutableMap<Int, State>>()
+    data class State(val type: String, val payload: String, val name: String, val place: String)
 
-    private fun publish(serial: String, id: Int, type: String, payload: Buffer, name: String) {
+    private fun publish(item: MqttItem, type: String, payload: String) {
+        states.computeIfAbsent(item.serial) { mutableMapOf() }
+        states[item.serial]?.put(item.id, State(type, payload, item.name, item.place))
+
         mqttClient.publish(
-            "qbus/" + serial + "/" + type + "/" + id + "/" + name,
-            payload,
+            "qbus/" + item.serial + "/sensor/" + type + "/" + item.id + "/state",
+            Buffer.buffer(payload),
             MqttQoS.AT_LEAST_ONCE,
             false,
             true
@@ -144,12 +147,25 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 LOG.info("MQTT publish OK")
             }
         }
+        mqttClient.publish(
+            "qbus/" + item.serial + "/state",
+            Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(states)),
+            MqttQoS.AT_LEAST_ONCE,
+            false,
+            true
+        ) { ar ->
+            if (ar.failed()) {
+                LOG.warn("Can't send MQTT message", ar.cause())
+            } else {
+                LOG.info("MQTT publish OK")
+            }
+        }
     }
 
     private fun subscribe() {
         mqttClient.publishHandler(this::handleOpenhabEvent)
         mqttClient.subscribe(
-            "qbus/+/+/+/command",
+            "qbus/+/sensor/+/+/command",
             MqttQoS.AT_LEAST_ONCE.value()
         )
     }
@@ -172,7 +188,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     private fun toQbus(serial: String, type: String, payload: String, id: Int) {
         MqttItem.Type.fromMqtt(type)?.let { t ->
             t.toQbusInternal(payload)?.let { p ->
-                val item = MqttItem(serial, t, id, p)
+                val item = MqttItem(serial, t, id, p, "", "")
                 LOG.debug("Sending to Qbus verticle")
                 vertx.eventBus().send(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM, item)
             }
@@ -181,8 +197,9 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
-        private val PATTERN_COMMAND = Pattern.compile("qbus/([^/]+)/([^/]+)/(\\d+)/command")
+        private val PATTERN_COMMAND = Pattern.compile("qbus/([^/]+)/sensor/([^/]+)/(\\d+)/command")
         val ADDRESS = "address_mqtt_verticle"
+        private val OBJECT_MAPPER = ObjectMapper()
     }
 
 }

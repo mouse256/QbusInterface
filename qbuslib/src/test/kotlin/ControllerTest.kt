@@ -7,6 +7,7 @@ import kotlinx.coroutines.*
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.fail
 import org.mockito.ArgumentMatchers.*
 import org.muizenhol.qbus.Common
 import org.muizenhol.qbus.Controller
@@ -16,6 +17,9 @@ import org.muizenhol.qbus.exception.InvalidSerialException
 import org.muizenhol.qbus.exception.LoginException
 import org.muizenhol.qbus.exception.QbusException
 import org.muizenhol.qbus.sddata.SdDataJson
+import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutput
+import org.muizenhol.qbus.sddata.SdOutputOnOff
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayOutputStream
 import java.lang.invoke.MethodHandles
@@ -43,7 +47,7 @@ class ControllerTest : StringSpec() {
         id = 30,
         originalName = "out1",
         shortName = "o1",
-        typeId = 0,//TODO
+        typeId = SdDataStruct.Type.ON_OFF.id,
         real = true,
         system = true,
         eventsOnSd = true,
@@ -173,6 +177,14 @@ class ControllerTest : StringSpec() {
         return waiting
     }
 
+    private fun assertOnOffValue(out: SdOutput?, value: Byte) {
+        when (out) {
+            null -> fail("did not expect null")
+            is SdOutputOnOff -> assertThat(out.value, equalTo(value))
+            else -> fail("unexpected type")
+        }
+    }
+
     init {
         "SunnyDay" {
             LOG.info("OK")
@@ -195,6 +207,7 @@ class ControllerTest : StringSpec() {
             val ex = assertThrows<InvalidSerialException> { runBlocking { cf.await() } }
             assertThat(ex.message, equalTo("Invalid serial, got 050607 expected 010203"))
         }
+
         "SunnyDayWithEvents" {
             LOG.info("OK")
             controller.use {
@@ -202,7 +215,7 @@ class ControllerTest : StringSpec() {
                 sunny {
                     runBlocking {
                         LOG.info("V1")
-                        assertThat(controller.dataHandler!!.data.outputs[outOnOff1.id]!!.value, equalTo(0xff.toByte()))
+                        assertOnOffValue(controller.dataHandler!!.data.outputs[outOnOff1.id], 0xff.toByte())
 
                         LOG.info("V2")
                         sendEvent(
@@ -210,14 +223,14 @@ class ControllerTest : StringSpec() {
                         ).join()
 
                         LOG.info("V3")
-                        assertThat(controller.dataHandler!!.data.outputs[outOnOff1.id]!!.value, equalTo(0x00.toByte()))
+                        assertOnOffValue(controller.dataHandler!!.data.outputs[outOnOff1.id], 0x00.toByte())
 
                         LOG.info("V4")
                         sendEvent(
                             Event(outOnOff1.address.toByte(), byteArrayOf(0xff.toByte(), 0x00, 0x00, 0x00))
                         ).join()
                         LOG.info("V5")
-                        assertThat(controller.dataHandler!!.data.outputs[outOnOff1.id]!!.value, equalTo(0xFF.toByte()))
+                        assertOnOffValue(controller.dataHandler!!.data.outputs[outOnOff1.id], 0xff.toByte())
                         LOG.info("V6")
                         controller.close()
                         waiting.complete(Unit)

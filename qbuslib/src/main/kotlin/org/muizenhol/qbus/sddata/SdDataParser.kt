@@ -2,6 +2,7 @@ package org.muizenhol.qbus.sddata
 
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.muizenhol.qbus.Common
+import org.muizenhol.qbus.datatype.AddressStatus
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
@@ -55,6 +56,52 @@ class SdDataParser {
                 || name.toLowerCase().startsWith("z_")
     }
 
+    private fun toOutput(outJson: SdDataJson.Outputs, place: SdDataStruct.Place): SdOutput? {
+        val type = SdDataStruct.Type.values()
+            .toList()
+            .filter { it.id == outJson.typeId }
+            .firstOrNull() ?: SdDataStruct.Type.UNKNOWN
+        return when (type) {
+            SdDataStruct.Type.ON_OFF
+            -> SdOutputOnOff(
+                name = outJson.originalName,
+                id = outJson.id,
+                address = outJson.address.toByte(),
+                subAddress = outJson.subAddress.toByte(),
+                controllerId = outJson.controllerId,
+                place = place,
+                readonly = isReadOnly(outJson.originalName),
+            )
+            SdDataStruct.Type.DIMMER1B,
+            SdDataStruct.Type.DIMMER2B
+            -> SdOutputDimmer(
+                name = outJson.originalName,
+                id = outJson.id,
+                address = outJson.address.toByte(),
+                subAddress = outJson.subAddress.toByte(),
+                controllerId = outJson.controllerId,
+                place = place,
+                readonly = isReadOnly(outJson.originalName),
+            )
+            SdDataStruct.Type.THERMOSTAT,
+            SdDataStruct.Type.THERMOSTAT2,
+            -> {
+                if (outJson.subAddress != 0) {
+                    throw IllegalArgumentException("Invalid subaddress: " + outJson.subAddress)
+                }
+                SdOutputThermostat(
+                    name = outJson.originalName,
+                    id = outJson.id,
+                    address = outJson.address.toByte(),
+                    controllerId = outJson.controllerId,
+                    place = place,
+                    readonly = isReadOnly(outJson.originalName)
+                )
+            }
+            else -> null
+        }
+    }
+
     private fun parse(data: SdDataJson): SdDataStruct {
         LOG.info("SD data: version: {} -- serial: {}", data.version, data.serialNumber)
 
@@ -65,21 +112,11 @@ class SdDataParser {
             )
         }.associateBy { it.id }
 
+
         val outputs = data.outputs.map { output ->
-            SdDataStruct.Output(
-                name = output.originalName,
-                id = output.id,
-                address = output.address.toByte(),
-                subAddress = output.subAddress.toByte(),
-                controllerId = output.controllerId,
-                place = placesMap.getOrDefault(output.placeId, SdDataStruct.Place(-1, "Unknown")),
-                readonly = isReadOnly(output.originalName),
-                type = SdDataStruct.Type.values()
-                    .toList()
-                    .filter { it.id == output.typeId }
-                    .firstOrNull() ?: SdDataStruct.Type.UNKNOWN
-            )
-        }.associateBy { it.id }
+            val place = placesMap.getOrDefault(output.placeId, SdDataStruct.Place(-1, "Unknown"))
+            toOutput(output, place)
+        }.filterNotNull().associateBy { it.id }
 
         val d = SdDataStruct(
             version = data.version,
@@ -90,7 +127,8 @@ class SdDataParser {
         d.outputs.values.sortedBy { x -> x.address }
             .forEach {
                 LOG.info(
-                    "Output {} - {} ({})",
+                    "Output {}: {} {} ({})",
+                    it.typeName,
                     Common.byteToHex(it.address),
                     Common.byteToHex(it.subAddress),
                     it.name
@@ -104,7 +142,7 @@ data class SdDataStruct(
     val version: String,
     val serialNumber: String,
     val places: Map<Int, Place>,
-    val outputs: Map<Int, Output>
+    val outputs: Map<Int, SdOutput>
     /** key: id */
 ) {
     data class Place(
@@ -122,18 +160,129 @@ data class SdDataStruct(
         THERMOSTAT(25),
         THERMOSTAT2(15), //no clue what the difference is with the other thermostat
     }
+}
 
-    data class Output(
-        val id: Int,
-        val name: String,
-        val address: Byte,
-        val subAddress: Byte,
-        val controllerId: Int,
-        val place: Place,
-        val readonly: Boolean,
-        val type: Type
-    ) {
-        var value: Byte? = null
+
+
+sealed class SdOutput {
+    abstract val id: Int
+    abstract val name: String
+    abstract val address: Byte
+    abstract val subAddress: Byte
+    abstract val controllerId: Int
+    abstract val place: SdDataStruct.Place
+    abstract val readonly: Boolean
+    abstract val typeName: String
+    abstract fun clone(): SdOutput
+    abstract fun getAddressStatus(): AddressStatus
+    abstract fun printValue(): String
+
+    /**
+     * Update value.
+     * @return true if update was done. False if value was already set.
+     */
+    abstract fun update(newData: ByteArray): Boolean
+
+    companion object {
+        val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
 
+    protected fun singleValueUpdate(sub: SingleValue, newData: ByteArray): Boolean {
+        LOG.debug("Updating {} {} ({})", typeName, subAddress, name)
+        if (subAddress >= newData.size) {
+            LOG.warn("Unexpected subaddress {} on {} ({})", subAddress, address, name)
+            return false
+        }
+        val valueNew = newData[subAddress.toInt()]
+        if (sub.value == valueNew) {
+            LOG.trace("Not updating value for {} since identical", name)
+            return false //Nothing to do
+        }
+        sub.value = valueNew
+        return true
+    }
+
+    protected fun singleValueGetAddressStatus(sub: SingleValue): AddressStatus =
+        AddressStatus(
+            address,
+            subAddress,
+            data = byteArrayOf(0x00, sub.value),
+            write = true
+        )
 }
+
+interface SingleValue {
+    var value: Byte
+}
+
+
+data class SdOutputOnOff(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val subAddress: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput(), SingleValue {
+    override var value: Byte = 0x00
+    override val typeName = "OnOff"
+
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
+    override fun printValue(): String = "0x" + Common.byteToHex(value)
+    override fun update(newData: ByteArray): Boolean {
+        return singleValueUpdate(this, newData)
+    }
+}
+
+data class SdOutputDimmer(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val subAddress: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput(), SingleValue {
+    override var value: Byte = 0x00
+    override val typeName = "Dimmer"
+
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
+    override fun printValue(): String = "0x" + Common.byteToHex(value)
+    override fun update(newData: ByteArray): Boolean {
+        return singleValueUpdate(this, newData)
+    }
+}
+
+data class SdOutputThermostat(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput() {
+    private var value = byteArrayOf(0x00,0x00,0x00,0x00)
+    override val subAddress = 0x00.toByte()
+    override val typeName = "Thermostat"
+    override fun clone(): SdOutput {
+        return copy()
+    }
+
+    override fun getAddressStatus(): AddressStatus {
+        TODO("Not implemented")
+    }
+
+    override fun printValue(): String =
+        "no clue"
+
+    override fun update(newData: ByteArray): Boolean {
+        //it means "??" "set" "current" "??"
+        //where temperate needs to be divided by 2 to get the actual value
+        value = newData
+        return true
+    }
+}
+

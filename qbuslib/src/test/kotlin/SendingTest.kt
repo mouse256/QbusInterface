@@ -6,6 +6,7 @@ import org.muizenhol.qbus.Common
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutputOnOff
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
@@ -50,9 +51,9 @@ class SendingTest : StringSpec() {
 
     private fun writeEvent(value: Byte) {
         val place = SdDataStruct.Place(14, "myplace")
-        val out = SdDataStruct.Output(12, "myname", 0x07, 0x02, 13, place, false, SdDataStruct.Type.ON_OFF)
+        val out = SdOutputOnOff(12, "myname", 0x07, 0x02, 13, place, false)
         out.value = value
-        ctrl.setNewState(out)
+        ctrl.requestNewQbusState(out)
     }
 
     init {

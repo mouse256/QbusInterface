@@ -10,7 +10,9 @@ import org.muizenhol.qbus.DataHandler
 import org.muizenhol.qbus.bridge.type.MqttHandled
 import org.muizenhol.qbus.bridge.type.MqttItem
 import org.muizenhol.qbus.bridge.type.StatusRequest
-import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutput
+import org.muizenhol.qbus.sddata.SdOutputDimmer
+import org.muizenhol.qbus.sddata.SdOutputOnOff
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
@@ -83,19 +85,24 @@ class QbusVerticle(
     /**
      * Event from Qbus
      */
-    private fun onDataUpdate(serial: String, data: SdDataStruct.Output) {
+    private fun onDataUpdate(serial: String, data: SdOutput) {
         try {
-            data.value?.let { payload ->
-                val payloadInt = (payload.toInt() and 0xff)
-                LOG.info("update for {}({}) to {}", data.name, serial, payloadInt)
-                val type = MqttItem.Type.fromQbusInternal(data.type)
-                type?.run {
-                    vertx.eventBus().send(MqttVerticle.ADDRESS, MqttItem(serial, type, data.id, payloadInt))
-                }
+            when (data) {
+                is SdOutputOnOff -> onDataUpdateSingleValue(serial, data, MqttItem.Type.ON_OFF, data.value)
+                is SdOutputDimmer -> onDataUpdateSingleValue(serial, data, MqttItem.Type.DIMMER, data.value)
             }
         } catch (ex: Exception) {
             LOG.warn("Error processing qbus data", ex)
         }
+    }
+
+    private fun onDataUpdateSingleValue(serial: String, data: SdOutput, type: MqttItem.Type, payload: Byte) {
+        val payloadInt = (payload.toInt() and 0xff)
+        LOG.info("update for {}({}) to {}", data.name, serial, payloadInt)
+        vertx.eventBus().send(
+            MqttVerticle.ADDRESS,
+            MqttItem(serial, type, data.id, payloadInt, data.name, data.place.name)
+        )
     }
 
     private fun handleQbusUpdateItem(msg: Message<MqttItem>) {
@@ -111,8 +118,19 @@ class QbusVerticle(
         }
         val out = dataHandler?.getOutput(item.id)
         if (out != null) {
-            out.value = item.payload.toByte()
-            controller.setNewState(out)
+            when (out) {
+                is SdOutputOnOff -> {
+                    out.value = item.payload.toByte()
+                    true
+                }
+                is SdOutputDimmer -> {
+                    out.value = item.payload.toByte()
+                    true
+                }
+                else -> false
+            }.takeIf { x -> x }.run {
+                controller.requestNewQbusState(out)
+            }
         } else {
             LOG.warn("can't find output with id {}", item.payload)
         }
