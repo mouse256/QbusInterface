@@ -144,7 +144,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
                 restart()
             } else {
-                LOG.info("MQTT publish OK")
+                LOG.debug("MQTT publish OK")
             }
         }
         mqttClient.publish(
@@ -157,7 +157,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             if (ar.failed()) {
                 LOG.warn("Can't send MQTT message", ar.cause())
             } else {
-                LOG.info("MQTT publish OK")
+                LOG.debug("MQTT publish OK")
             }
         }
     }

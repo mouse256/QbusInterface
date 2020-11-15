@@ -163,7 +163,6 @@ data class SdDataStruct(
 }
 
 
-
 sealed class SdOutput {
     abstract val id: Int
     abstract val name: String
@@ -179,9 +178,11 @@ sealed class SdOutput {
 
     /**
      * Update value.
+     * @param newData The new data
+     * @param event: True if the data is an event, false if it's an addressStatus
      * @return true if update was done. False if value was already set.
      */
-    abstract fun update(newData: ByteArray): Boolean
+    abstract fun update(newData: ByteArray, event: Boolean): Boolean
 
     companion object {
         val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
@@ -231,7 +232,7 @@ data class SdOutputOnOff(
     override fun clone(): SdOutput = copy()
     override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
     override fun printValue(): String = "0x" + Common.byteToHex(value)
-    override fun update(newData: ByteArray): Boolean {
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
         return singleValueUpdate(this, newData)
     }
 }
@@ -251,7 +252,7 @@ data class SdOutputDimmer(
     override fun clone(): SdOutput = copy()
     override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
     override fun printValue(): String = "0x" + Common.byteToHex(value)
-    override fun update(newData: ByteArray): Boolean {
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
         return singleValueUpdate(this, newData)
     }
 }
@@ -264,25 +265,85 @@ data class SdOutputThermostat(
     override val place: SdDataStruct.Place,
     override val readonly: Boolean,
 ) : SdOutput() {
-    private var value = byteArrayOf(0x00,0x00,0x00,0x00)
+    private var value1: Byte = 0x00
+    private var tempSet: Byte = 0x00
+    private var tempMeasured: Byte = 0x00
+    private var mode: Mode= Mode.OFF
     override val subAddress = 0x00.toByte()
     override val typeName = "Thermostat"
     override fun clone(): SdOutput {
         return copy()
     }
 
-    override fun getAddressStatus(): AddressStatus {
-        TODO("Not implemented")
+    override fun getAddressStatus(): AddressStatus =
+        AddressStatus(
+            address,
+            subAddress,
+            data = byteArrayOf(value1, tempSet, tempMeasured, mode.id),
+            write = true
+        )
+
+    private fun toTemp(value: Byte): Double {
+        val valueInt = (value.toInt() and 0xff)
+        return valueInt.toDouble() / 2
     }
 
-    override fun printValue(): String =
-        "no clue"
+    fun getTempMeasured(): Double = toTemp(tempMeasured)
+    fun getTempSet(): Double = toTemp(tempSet)
 
-    override fun update(newData: ByteArray): Boolean {
+    override fun printValue(): String =
+        "Set: ${getTempSet()} -- Measured: ${getTempMeasured()} -- Mode: ${mode} " +
+                "(0X${Common.byteToHex(value1)})"
+
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
         //it means "??" "set" "current" "??"
         //where temperate needs to be divided by 2 to get the actual value
-        value = newData
-        return true
+        if (newData.size != 4) {
+            LOG.warn("Illegal value for Thermostat: ${Common.bytesToHex(newData)}")
+            return false;
+        }
+        var changed = false
+        val data = if (event) {
+            newData
+        } else {
+            //data is ordered differently when received from addressStatus as from event. Re-order.
+            byteArrayOf(0x00, newData[0], newData[1], newData[2])
+        }
+        if (value1 != data[0]) {
+            value1 = data[0]
+            changed = true
+        }
+        if (tempSet != data[1]) {
+            tempSet = data[1]
+            changed = true
+        }
+        if (tempMeasured != data[2]) {
+            tempMeasured = data[2]
+            changed = true
+        }
+        val newMode = Mode.fromId(data[3])
+        if (mode != newMode) {
+            mode = newMode
+            changed = true
+        }
+        return changed
+    }
+
+    enum class Mode(val id: Byte) {
+        OFF(0x00),
+        FREEZE(0x01),
+        ECONOMY(0x02),
+        COMFORT(0x03),
+        NIGHT(0x04);
+
+        companion object {
+            fun fromId(id: Byte): Mode {
+                return values().iterator()
+                    .asSequence()
+                    .find { it.id == id } ?: OFF
+            }
+        }
+
     }
 }
 

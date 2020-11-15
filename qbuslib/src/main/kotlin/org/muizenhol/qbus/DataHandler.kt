@@ -26,11 +26,11 @@ class DataHandler(val data: SdDataStruct) {
     /**
      * Update the internal state after a new event was received from qbus controller
      */
-    private fun update(address: Byte, newData: ByteArray) {
+    private fun update(address: Byte, newData: ByteArray, event: Boolean) {
         data.outputs.filterValues { v -> v.address == address }
             .forEach { _, output ->
                 val old = output.printValue()
-                if (output.update(newData)) {
+                if (output.update(newData, event)) {
                     LOG.info(
                         "Update value for {} from {} to {}",
                         output.name,
@@ -46,11 +46,11 @@ class DataHandler(val data: SdDataStruct) {
         if (event.subAddress != 0xFF.toByte()) {
             throw IllegalStateException("Can't handle this subaddress")
         }
-        update(event.address, event.data)
+        update(event.address, event.data, false)
     }
 
     fun update(event: Event) {
-        update(event.address, event.data)
+        update(event.address, event.data, true)
     }
 
 
