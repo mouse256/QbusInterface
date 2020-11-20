@@ -227,9 +227,26 @@ class Controller(
      * This function will write a new state of an item to the Qbus controller.
      * If the state gets accepted, the Qbus controller will publish an event confirming the actual state.
      */
-    fun requestNewQbusState(output: SdOutput) {
-        LOG.info("sending event to Qbus: {} ({}: {}) -> {}", output.typeName, output.id, output.name, output.printValue())
-        conn.write(output.getAddressStatus())
+    fun requestNewQbusState(serial: String, output: SdOutput) {
+        dataHandler?.let { dh ->
+            if (dh.data.serialNumber != serial) {
+                LOG.debug("Data for wrong serial")
+                return
+            }
+            val outOrig = dh.getOutput(output.id)
+            if (outOrig != null) {
+                //Lookup the original output and update the value
+                //This is needed because the `output` value we get as parameter does not have all the required fields set
+                //(like address and subaddress)
+                outOrig.update(output)
+                LOG.info("sending event to Qbus: {} ({}: {}) -> {}", outOrig.typeName, outOrig.id, outOrig.name, outOrig.printValue())
+                conn.write(outOrig.getAddressStatus())
+            }
+            else {
+                LOG.warn("Can't find output with id {} to update", output.id)
+            }
+        }
+
     }
 
     private fun restart() {

@@ -10,19 +10,20 @@ import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
 import org.muizenhol.qbus.bridge.type.MqttHandled
-import org.muizenhol.qbus.bridge.type.MqttItem
+import org.muizenhol.qbus.bridge.type.MqttItemWrapper
+import org.muizenhol.qbus.bridge.type.MqttType
 import org.muizenhol.qbus.bridge.type.StatusRequest
+import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.regex.Pattern
-import kotlin.math.round
 
 class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle() {
     lateinit var mqttClient: MqttClient
-    lateinit var consumer: MessageConsumer<MqttItem>
+    lateinit var consumer: MessageConsumer<MqttItemWrapper>
     var started = false
 
     override fun start() {
@@ -80,62 +81,43 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         }
     }
 
-    private fun handle(msg: Message<MqttItem>) {
+    /**
+     * Qbus to MQTT
+     */
+    private fun handle(msg: Message<MqttItemWrapper>) {
         if (!started) {
             LOG.debug("Got msg but MQTT is not yet started")
             return
         }
-        val res = sendToMqtt(msg.body())
+        val res = publish(msg.body())
         msg.reply(res)
     }
 
-    /**
-     * Qbus to MQTT
-     */
-    private fun sendToMqtt(item: MqttItem): MqttHandled {
-        LOG.info("update for {} to {}", item.id, item.payload)
-        if (!mqttClient.isConnected) {
-            LOG.warn("MQTT is not connected, ignoring")
-            return MqttHandled.MQTT_ERROR
-        }
-        when (item.type) {
-            MqttItem.Type.ON_OFF -> {
-                when (item.payload) {
-                    0x00 -> "0"
-                    0xFF -> "255"
-                    else -> {
-                        LOG.warn("Invalid payload for ON_OFF type. Sensor {}: {}", item.id, item.payload)
-                        return MqttHandled.DATA_ERROR
-                    }
-                }.let { v ->
-                    LOG.info("MQTT Publish switch to {}", v)
-                    publish(item,  "switch", v)
-                    return MqttHandled.OK
-                }
-            }
-            MqttItem.Type.DIMMER -> {
-                val v = item.payload.toString()
-                LOG.info("MQTT Publish dimmer to {}", v)
-                publish(item, "dimmer", v)
-                return MqttHandled.OK
-            }
-            else -> {
-                //TODO add support for more types
-                return MqttHandled.DATA_TYPE_NOT_SUPPORTED
+    private val states = mutableMapOf<String, MutableMap<Int, State>>()
+
+    data class State(val type: String, val payload: String, val name: String, val place: String)
+
+    private fun publish(item: MqttItemWrapper): MqttHandled {
+        //TODO: fix
+        //states.computeIfAbsent(item.serial) { mutableMapOf() }
+        //states[item.serial]?.put(item.id, State(type, payload, item.name, item.place))
+        return when (item.data) {
+            is SdOutputOnOff -> publish(item, item.data.asInt().toString(), "state")
+            is SdOutputDimmer -> publish(item, item.data.asInt().toString(), "state")
+            is SdOutputThermostat -> {
+                publish(item, item.data.getTempSet().toString(), "set")
+                publish(item, item.data.getTempMeasured().toString(), "measured")
             }
         }
     }
 
-    private val states = mutableMapOf<String, MutableMap<Int, State>>()
-    data class State(val type: String, val payload: String, val name: String, val place: String)
-
-    private fun publish(item: MqttItem, type: String, payload: String) {
-        states.computeIfAbsent(item.serial) { mutableMapOf() }
-        states[item.serial]?.put(item.id, State(type, payload, item.name, item.place))
+    private fun publish(item: MqttItemWrapper, payloadS: String, topic: String): MqttHandled {
+        val type = MqttType.fromQbus(item.data)
+        val payload = Buffer.buffer(payloadS)
 
         mqttClient.publish(
-            "qbus/" + item.serial + "/sensor/" + type + "/" + item.id + "/state",
-            Buffer.buffer(payload),
+            "qbus/" + item.serial + "/sensor/" + type.mqttName + "/" + item.data.id + "/${topic}",
+            payload,
             MqttQoS.AT_LEAST_ONCE,
             false,
             true
@@ -160,6 +142,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 LOG.debug("MQTT publish OK")
             }
         }
+        return MqttHandled.OK
     }
 
     private fun subscribe() {
@@ -185,13 +168,68 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         }
     }
 
-    private fun toQbus(serial: String, type: String, payload: String, id: Int) {
-        MqttItem.Type.fromMqtt(type)?.let { t ->
-            t.toQbusInternal(payload)?.let { p ->
-                val item = MqttItem(serial, t, id, p, "", "")
-                LOG.debug("Sending to Qbus verticle")
-                vertx.eventBus().send(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM, item)
+    private fun toQbus(serial: String, typeS: String, payload: String, id: Int) {
+        val type = MqttType.fromMqtt(typeS)
+        val placeDummy = SdDataStruct.Place(-1, "")
+        if (type == null) {
+            LOG.debug("Unsupported type: {}", type)
+        } else {
+            val data: SdOutput = when (type) {
+                MqttType.ON_OFF -> {
+                    SdOutputOnOff(id, "", 0x00, 0x00, -1, placeDummy, false).apply {
+                        val pay = convertPayloadOnOff(payload) ?: return
+                        value = pay
+                    }
+                }
+                MqttType.DIMMER ->
+                    SdOutputDimmer(id, "", 0x00, 0x00, -1, placeDummy, false).apply {
+                        val pay = convertPayloadDimmer(payload) ?: return
+                        value = pay
+                    }
+                MqttType.THERMOSTAT ->
+                    SdOutputThermostat(id, "", 0x00, -1, placeDummy, false).apply {
+                        val pay = convertThermostatPayload(payload) ?: return
+                        setTemp(pay)
+                    }
             }
+            LOG.debug("Sending to Qbus verticle")
+            vertx.eventBus().send(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM, MqttItemWrapper(serial, data))
+        }
+
+    }
+
+    private fun convertPayloadOnOff(payload: String): Byte? {
+        return when (payload) {
+            "0" -> 0x00.toByte()
+            "255" -> 0xFF.toByte()
+            else -> {
+                LOG.warn("Invalid ON_OFF payload: {}", payload)
+                null
+            }
+        }
+    }
+
+    private fun convertPayloadDimmer(payload: String): Byte? {
+        val p = payload.toDoubleOrNull()
+            ?.toInt()
+            ?.takeIf { i -> i in 0..255 }
+            ?.toByte()
+        if (p != null) {
+            return p
+        } else {
+            LOG.warn("Invalid dimmer payload: {}", payload)
+            return null
+        }
+    }
+
+    private fun convertThermostatPayload(payload: String): Double? {
+        val p = payload.toDoubleOrNull()
+            ?.takeIf { i -> (0 < i && i <= 30) }
+        if (p != null) {
+            return p
+        } else {
+            LOG.warn("Invalid dimmer payload: {}", payload)
+            return null
         }
     }
 

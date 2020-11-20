@@ -1,9 +1,10 @@
 package org.muizenhol.qbus.bridge
 
-import org.muizenhol.qbus.bridge.type.MqttItem
+import org.muizenhol.qbus.bridge.type.MqttType
 import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.muizenhol.qbus.sddata.SdOutput
+import org.muizenhol.qbus.sddata.SdOutputThermostat
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
@@ -53,44 +54,97 @@ class ExampleResource {
         val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
-                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output), output) }
-                .filter { out -> out.first != null }
+                .map { output -> Pair(MqttType.fromQbus(output), output) }
                 .sortedBy { output -> output.second.name }
                 .forEach { outpair ->
                     val output = outpair.second
-                    val type = getOpenhabType(output).toLowerCase()
-                    out.append("  Thing topic ${formatName("thing", output)} \"${output.name}\" @ \"QBus\" {\n")
+                    val mqttName = outpair.first.mqttName
+                    val type = if (output.readonly) "string" else outpair.first.getOpenhabItem().toLowerCase()
+                    out.append("  Thing topic ${formatName("thing", output.name)} \"${output.name}\" @ \"QBus\" {\n")
                         .append("    Channels:\n")
-                        .append("      Type ").append(type)
-                        .append(" : ${formatName("channel", output)} ")
-                        .append("[ stateTopic=\"qbus/${it.serialNumber}/sensor/${type}/${output.id}/state\" ")
-                    if (!output.readonly) {
-                        out.append(", commandTopic=\"qbus/${it.serialNumber}/sensor/${type}/${output.id}/command\"")
+
+                    val conf = outpair.first.getOpenhabChannelConfig()
+                    when (output) {
+                        is SdOutputThermostat -> {
+                            out.append(
+                                formatChannel(
+                                    type,
+                                    output.name + "_measured",
+                                    it.serialNumber,
+                                    mqttName,
+                                    output.id,
+                                    "measured",
+                                    true,
+                                    conf
+                                )
+                            )
+                            out.append(
+                                formatChannel(
+                                    type,
+                                    output.name + "_set",
+                                    it.serialNumber,
+                                    mqttName,
+                                    output.id,
+                                    "set",
+                                    false,
+                                    conf
+                                )
+                            )
+                        }
+                        else -> out.append(
+                            formatChannel(
+                                type,
+                                output.name,
+                                it.serialNumber,
+                                mqttName,
+                                output.id,
+                                "state",
+                                output.readonly,
+                                conf
+                            )
+                        )
                     }
-                    out.append(", ").append(outpair.first!!.getOpenhabThing()).append("]\n")
-                        .append("  }\n")
+                    out.append("  }\n")
                 }
         }
         out.append("}\n")
         return out.toString()
     }
 
-    private fun getOpenhabType(output: SdOutput): String {
-        if (output.readonly) {
-            return "string"
-        } else {
-            val type = MqttItem.Type.fromQbusInternal(output)
-            if (type != null) {
-                return type.getOpenhabItem();
-            }
-            else {
-                throw IllegalStateException("Not handled")
-            }
-        }
-    }
-
     private fun formatName(type: String, output: SdOutput): String {
         return "qbus_${type}_" + output.name.replace(" ", "_")
+    }
+
+    private fun formatName(type: String, name: String): String {
+        return "qbus_${type}_" + name.replace(" ", "_")
+    }
+
+    fun formatChannel(
+        type: String,
+        internalName: String,
+        serial: String,
+        mqttName: String,
+        id: Int,
+        stateName: String,
+        readOnly: Boolean,
+        conf: String
+    ): String {
+        val p1 = "Type ${type}: ${formatName("channel", internalName)} ["
+        val state = "stateTopic=\"qbus/${serial}/sensor/${mqttName}/${id}/${stateName}\""
+        val command = if (readOnly) "" else ", commandTopic=\"qbus/${serial}/sensor/${mqttName}/${id}/command\""
+        return "      ${p1}${state}${command}, ${conf}]\n"
+    }
+
+    /**
+     * @param type OpenHab type
+     * @param internalName Internal name
+     * @param name Human readable name
+     */
+    fun formatItem(type: String, internalName: String, outputName: String, name: String): String {
+        val p1 = "${type} ${formatName("item", internalName)} \"${name}\""
+        val p2 = "{channel=\"mqtt:topic:qbusBroker:${formatName("thing", outputName)}:" +
+                "${formatName("channel", internalName)}\"}"
+        return "${p1} ${p2}\n"
     }
 
     @GET
@@ -101,19 +155,39 @@ class ExampleResource {
         val data = controller.getDataHandler()?.data
         data?.let {
             it.outputs.values
-                .map { output-> Pair(MqttItem.Type.fromQbusInternal(output), output) }
-                .filter { out -> out.first != null }
+                .map { output -> Pair(MqttType.fromQbus(output), output) }
                 .sortedBy { output -> output.second.name }
                 .forEach { outPair ->
                     val output = outPair.second
-                    out.append("${outPair.first!!.getOpenhabItem()} ${formatName("item", output)} \"${output.name}\" ")
-                        .append(
-                            "{channel=\"mqtt:topic:qbusBroker:${formatName("thing", output)}:${formatName(
-                                "channel",
-                                output
-                            )}\"}\n"
-                        )
-
+                    when (output) {
+                        is SdOutputThermostat -> {
+                            out.append(
+                                formatItem(
+                                    outPair.first.getOpenhabItem(),
+                                    output.name + "_measured",
+                                    output.name,
+                                    "Measured"
+                                )
+                            )
+                            out.append(
+                                formatItem(
+                                    outPair.first.getOpenhabItem(),
+                                    output.name + "_set",
+                                    output.name,
+                                    "Set"
+                                )
+                            )
+                        }
+                        else ->
+                            out.append(
+                                formatItem(
+                                    outPair.first.getOpenhabItem(),
+                                    output.name,
+                                    output.name,
+                                    output.name
+                                )
+                            )
+                    }
                 }
         }
         return out.toString()

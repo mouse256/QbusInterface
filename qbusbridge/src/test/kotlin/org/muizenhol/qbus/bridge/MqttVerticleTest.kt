@@ -2,7 +2,6 @@ package org.muizenhol.qbus.bridge
 
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AsyncResult
-import io.vertx.core.Handler
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.core.buffer.Buffer
@@ -12,23 +11,27 @@ import io.vertx.junit5.VertxExtension
 import io.vertx.junit5.VertxTestContext
 import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
+import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.MatcherAssert.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
 import org.muizenhol.qbus.bridge.type.MqttHandled
-import org.muizenhol.qbus.bridge.type.MqttItem
+import org.muizenhol.qbus.bridge.type.MqttItemWrapper
 import org.muizenhol.qbus.bridge.type.StatusRequest
+import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutputDimmer
+import org.muizenhol.qbus.sddata.SdOutputOnOff
 import org.slf4j.LoggerFactory
-import java.lang.IllegalArgumentException
-import java.lang.IllegalStateException
 import java.lang.invoke.MethodHandles
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
 @ExtendWith(VertxExtension::class)
 @Timeout(10, timeUnit = TimeUnit.SECONDS)
-class VertxTest() {
+class MqttVerticleTest() {
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
@@ -36,6 +39,7 @@ class VertxTest() {
     var mqttClient: MqttClient? = null
     var mqttServer: StubbedMqttServer? = null
     var port: Int = 0
+    val place = SdDataStruct.Place(-1, "")
 
     fun startListener(vertx: Vertx, vertxContext: VertxTestContext) {
         val checkpoint = vertxContext.checkpoint()
@@ -54,7 +58,7 @@ class VertxTest() {
 
     @BeforeEach
     fun beforeEach(vertx: Vertx, vertxContext: VertxTestContext) {
-        LocalOnlyCodec.register(vertx, MqttItem::class.java)
+        LocalOnlyCodec.register(vertx, MqttItemWrapper::class.java)
         LocalOnlyCodec.register(vertx, StatusRequest::class.java)
         LocalOnlyCodec.register(vertx, MqttHandled::class.java)
         mqttServer = StubbedMqttServer()
@@ -100,8 +104,7 @@ class VertxTest() {
                 LOG.info("topic OK")
                 if (value.equals(payload)) {
                     checkpoint.flag()
-                }
-                else {
+                } else {
                     LOG.debug("Not matched: \"{}\" != \"{}\"", value, payload)
                 }
             }
@@ -116,29 +119,41 @@ class VertxTest() {
         }
     }
 
-    private fun send(vertx: Vertx, vertxContext: VertxTestContext, item: MqttItem, expected: MqttHandled) {
+    private fun send(vertx: Vertx, vertxContext: VertxTestContext, item: MqttItemWrapper, expected: MqttHandled) {
         val checkpoint = vertxContext.checkpoint()
         vertx.eventBus().request(MqttVerticle.ADDRESS, item) { ar: AsyncResult<Message<MqttHandled>> ->
             if (ar.failed()) {
                 vertxContext.failNow(ar.cause())
-            }
-            else {
+            } else {
                 val res = ar.result().body()
                 if (res != expected) {
                     vertxContext.failNow(IllegalStateException("Not expected result: ${res}"))
-                }
-                else {
+                } else {
                     checkpoint.flag()
                 }
             }
         }
     }
 
+    private fun mkSwitch(serial: String, id: Int, payload: Byte, readOnly: Boolean = false): MqttItemWrapper {
+        return MqttItemWrapper(serial,
+            SdOutputOnOff(id, "", 0x00, 0x00, -1, place, readOnly).apply {
+                value = payload
+            })
+    }
+
+    private fun mkDimmer(serial: String, id: Int, payload: Byte): MqttItemWrapper {
+        return MqttItemWrapper(serial,
+            SdOutputDimmer(id, "", 0x00, 0x00, -1, place, false).apply {
+                value = payload
+            })
+    }
+
     @Test
     fun testSwitchOff(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
             expectMqtt(vertxContext, "qbus/12345/sensor/switch/1/state", "0")
-            val item = MqttItem("12345", MqttItem.Type.ON_OFF, 1, 0x00, "", "")
+            val item = mkSwitch("12345", 1, 0x00.toByte())
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
@@ -147,16 +162,26 @@ class VertxTest() {
     fun testSwitchOn(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
             expectMqtt(vertxContext, "qbus/54321/sensor/switch/2/state", "255")
-            val item = MqttItem("54321", MqttItem.Type.ON_OFF, 2, 0xFF, "", "")
+            val item = mkSwitch("54321", 2, 0xFF.toByte())
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
 
     @Test
+    @Disabled //rather useless, we can expect data coming from qbus to be valid
     fun testSwitchInvalid(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            val item = MqttItem("54321", MqttItem.Type.ON_OFF, 2, 0x33, "", "")
+            val item = mkSwitch("54321", 2, 0x33.toByte())
             send(vertx, vertxContext, item, MqttHandled.DATA_ERROR)
+        }
+    }
+
+    @Test
+    fun testSwitchOnReadonly(vertx: Vertx, vertxContext: VertxTestContext) {
+        start(vertx, vertxContext) {
+            expectMqtt(vertxContext, "qbus/54321/sensor/switch/2/state", "255")
+            val item = mkSwitch("54321", 2, 0xFF.toByte(), readOnly = true)
+            send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
 
@@ -164,7 +189,7 @@ class VertxTest() {
     fun testDimmerOff(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
             expectMqtt(vertxContext, "qbus/12345/sensor/dimmer/1/state", "0")
-            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0x00, "", "")
+            val item = mkDimmer("12345", 1, 0x00.toByte())
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
@@ -172,9 +197,8 @@ class VertxTest() {
     @Test
     fun testDimmerOn(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/sensor/dimmer/1/state", "255")
-            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0xFF, "", "")
-            LOG.info("test: {}", item.payload)
+            expectMqtt(vertxContext, "qbus/54321/sensor/dimmer/2/state", "255")
+            val item = mkDimmer("54321", 2, 0xFF.toByte())
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
@@ -183,57 +207,84 @@ class VertxTest() {
     fun testDimmer(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
             expectMqtt(vertxContext, "qbus/12345/sensor/dimmer/1/state", "187")
-            val item = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0xBB, "", "")
-            LOG.info("test: {}", item.payload)
+            val item = mkDimmer("12345", 1, 0xBB.toByte())
             send(vertx, vertxContext, item, MqttHandled.OK)
+        }
+    }
+
+    private fun expectItem(vertx: Vertx, vertxContext: VertxTestContext, expected: MqttItemWrapper) {
+        val checkpoint = vertxContext.checkpoint()
+        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) { ar: Message<MqttItemWrapper> ->
+            try {
+                assertThat(ar.body(), equalTo(expected))
+                assertThat(ar.body().data.printValue(), equalTo(expected.data.printValue()))
+                checkpoint.flag()
+            } catch (t: Throwable) {
+                vertxContext.failNow(t)
+            }
         }
     }
 
     @Test
     fun testDimmerCommandOff(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 0, "", "")
-        val checkpoint = vertxContext.checkpoint()
-        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) {ar: Message<MqttItem> ->
-            if (!expected.equals(ar.body())) {
-                vertxContext.failNow(IllegalArgumentException("not expected: " + ar.body()))
-            }
-            checkpoint.flag()
-        }
+        val expected = mkDimmer("12345", 1, 0x00.toByte())
+        expectItem(vertx, vertxContext, expected)
         start(vertx, vertxContext) {
-            mqttClient!!.publish("qbus/12345/sensor/dimmer/1/command",
-                Buffer.buffer("0"), MqttQoS.AT_LEAST_ONCE, false, false)
+            mqttClient!!.publish(
+                "qbus/12345/sensor/dimmer/1/command",
+                Buffer.buffer("0"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
         }
     }
 
     @Test
     fun testDimmerCommandOn(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 255, "", "")
-        val checkpoint = vertxContext.checkpoint()
-        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) {ar: Message<MqttItem> ->
-            if (!expected.equals(ar.body())) {
-                vertxContext.failNow(IllegalArgumentException("not expected: " + ar.body()))
-            }
-            checkpoint.flag()
-        }
+        val expected = mkDimmer("12345", 1, 0xFF.toByte())
+        expectItem(vertx, vertxContext, expected)
         start(vertx, vertxContext) {
-            mqttClient!!.publish("qbus/12345/sensor/dimmer/1/command",
-                Buffer.buffer("255"), MqttQoS.AT_LEAST_ONCE, false, false)
+            mqttClient!!.publish(
+                "qbus/12345/sensor/dimmer/1/command",
+                Buffer.buffer("255"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
         }
     }
 
     @Test
     fun testDimmerCommandHalf(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = MqttItem("12345", MqttItem.Type.DIMMER, 1, 123, "", "")
+        val expected = mkDimmer("12345", 1, 123.toByte())
+        expectItem(vertx, vertxContext, expected)
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/dimmer/1/command",
+                Buffer.buffer("123.45"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
+        }
+    }
+
+    @Test
+    fun testSwitchCommandOn(vertx: Vertx, vertxContext: VertxTestContext) {
+        val expected = mkSwitch("12345", 1, 0xFF.toByte())
+        expectItem(vertx, vertxContext, expected)
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/switch/1/command",
+                Buffer.buffer("255"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
+        }
+    }
+
+    @Test
+    fun testSwitchCommandInvalid(vertx: Vertx, vertxContext: VertxTestContext) {
         val checkpoint = vertxContext.checkpoint()
-        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) {ar: Message<MqttItem> ->
-            if (!expected.equals(ar.body())) {
-                vertxContext.failNow(IllegalArgumentException("not expected: " + ar.body()))
-            }
-            checkpoint.flag()
+        vertx.setTimer(1000) { checkpoint.flag() }
+        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) { _: Message<MqttItemWrapper> ->
+            vertxContext.failNow(IllegalStateException("no data expected"))
         }
         start(vertx, vertxContext) {
-            mqttClient!!.publish("qbus/12345/sensor/dimmer/1/command",
-                Buffer.buffer("123.45"), MqttQoS.AT_LEAST_ONCE, false, false)
+            mqttClient!!.publish(
+                "qbus/12345/sensor/switch/1/command",
+                Buffer.buffer("55"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
         }
     }
 

@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.lang.invoke.MethodHandles
 import java.util.zip.ZipInputStream
+import kotlin.math.roundToInt
 
 
 class SdDataParser {
@@ -184,6 +185,8 @@ sealed class SdOutput {
      */
     abstract fun update(newData: ByteArray, event: Boolean): Boolean
 
+    abstract fun update(newData: SdOutput): Boolean
+
     companion object {
         val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
     }
@@ -235,6 +238,19 @@ data class SdOutputOnOff(
     override fun update(newData: ByteArray, event: Boolean): Boolean {
         return singleValueUpdate(this, newData)
     }
+    fun asInt(): Int = (value.toInt() and 0xff)
+
+    override fun update(newData: SdOutput): Boolean {
+        if (newData is SdOutputOnOff) {
+            if (value != newData.value) {
+                value = newData.value
+                return true
+            }
+        } else {
+            LOG.warn("Invalid data type: {}", newData.javaClass)
+        }
+        return false
+    }
 }
 
 data class SdOutputDimmer(
@@ -254,6 +270,19 @@ data class SdOutputDimmer(
     override fun printValue(): String = "0x" + Common.byteToHex(value)
     override fun update(newData: ByteArray, event: Boolean): Boolean {
         return singleValueUpdate(this, newData)
+    }
+    fun asInt(): Int = (value.toInt() and 0xff)
+
+    override fun update(newData: SdOutput): Boolean {
+        if (newData is SdOutputDimmer) {
+            if (value != newData.value) {
+                value = newData.value
+                return true
+            }
+        } else {
+            LOG.warn("Invalid data type: {}", newData.javaClass)
+        }
+        return false
     }
 }
 
@@ -278,14 +307,18 @@ data class SdOutputThermostat(
     override fun getAddressStatus(): AddressStatus =
         AddressStatus(
             address,
-            subAddress,
-            data = byteArrayOf(value1, tempSet, tempMeasured, mode.id),
+            0x01, //only tempset is being written, which lives at subAddress 0x01
+            data = byteArrayOf(0x00, tempSet),
             write = true
         )
 
     private fun toTemp(value: Byte): Double {
         val valueInt = (value.toInt() and 0xff)
         return valueInt.toDouble() / 2
+    }
+
+    fun setTemp(value: Double) {
+        tempSet = (value * 2).roundToInt().toByte()
     }
 
     fun getTempMeasured(): Double = toTemp(tempMeasured)
@@ -327,6 +360,24 @@ data class SdOutputThermostat(
             changed = true
         }
         return changed
+    }
+
+    override fun update(newData: SdOutput): Boolean {
+        if (newData is SdOutputThermostat) {
+            if (value1 != newData.value1 ||
+                tempMeasured != newData.tempMeasured ||
+                tempSet != newData.tempSet ||
+                mode != newData.mode) {
+                value1 = newData.value1
+                tempMeasured = newData.tempMeasured
+                tempSet = newData.tempSet
+                mode = newData.mode
+                return true
+            }
+        } else {
+            LOG.warn("Invalid data type: {}", newData.javaClass)
+        }
+        return false
     }
 
     enum class Mode(val id: Byte) {

@@ -4,8 +4,10 @@ import io.kotest.core.test.TestResult
 import io.kotest.matchers.shouldBe
 import org.muizenhol.qbus.Common
 import org.muizenhol.qbus.Controller
+import org.muizenhol.qbus.DataHandler
 import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.sddata.SdDataStruct
+import org.muizenhol.qbus.sddata.SdOutput
 import org.muizenhol.qbus.sddata.SdOutputOnOff
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
@@ -15,6 +17,8 @@ class SendingTest : StringSpec() {
     lateinit var sc: ServerConnection
     private val data = mutableListOf<ByteArray>()
     lateinit var ctrl: Controller
+    val places = mutableMapOf<Int, SdDataStruct.Place>()
+    val outputs = mutableMapOf<Int, SdOutput>()
 
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
@@ -28,6 +32,11 @@ class SendingTest : StringSpec() {
         ctrl = Controller("serial", "user", "pass", "localhost",
             { exception -> LOG.error("Exception", exception) },
             connectionCreator = { _, _, _ -> stub.sc })
+        places.clear()
+        outputs.clear()
+        val mockPlace = SdDataStruct.Place(1, "mockPlace")
+        places.put(mockPlace.id, mockPlace)
+        ctrl.dataHandler = DataHandler(SdDataStruct("v1","serial", places, outputs))
     }
 
     override fun afterTest(testCase: TestCase, result: TestResult) {
@@ -52,8 +61,9 @@ class SendingTest : StringSpec() {
     private fun writeEvent(value: Byte) {
         val place = SdDataStruct.Place(14, "myplace")
         val out = SdOutputOnOff(12, "myname", 0x07, 0x02, 13, place, false)
+        outputs.put(out.id, out)
         out.value = value
-        ctrl.requestNewQbusState(out)
+        ctrl.requestNewQbusState("serial", out)
     }
 
     init {

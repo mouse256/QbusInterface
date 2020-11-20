@@ -4,7 +4,9 @@ import io.quarkus.runtime.Startup
 import io.vertx.core.AsyncResult
 import io.vertx.core.Vertx
 import org.muizenhol.qbus.DataHandler
-import org.muizenhol.qbus.bridge.type.MqttItem
+import org.muizenhol.qbus.bridge.type.MqttHandled
+import org.muizenhol.qbus.bridge.type.MqttItemWrapper
+import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -52,7 +54,7 @@ class ControllerHandler {
 
     fun verticleDeployed(id: AsyncResult<String>) {
         if (id.failed()) {
-            LOG.error("Verticle deploy failed")
+            LOG.error("Verticle deploy failed", id.cause())
         } else {
             verticles.add(id.result())
         }
@@ -80,11 +82,15 @@ class ControllerHandler {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
 
         fun registerVertxCodecs(vertx: Vertx) {
-            LocalOnlyCodec.register(vertx, MqttItem::class.java)
+            LocalOnlyCodec.register(vertx, MqttItemWrapper::class.java)
+            LocalOnlyCodec.register(vertx, StatusRequest::class.java)
+            LocalOnlyCodec.register(vertx, MqttHandled::class.java)
         }
 
         fun unregisterVertxCodecs(vertx: Vertx) {
-            LocalOnlyCodec.unregister(vertx, MqttItem::class.java)
+            LocalOnlyCodec.unregister(vertx, MqttItemWrapper::class.java)
+            LocalOnlyCodec.unregister(vertx, StatusRequest::class.java)
+            LocalOnlyCodec.unregister(vertx, MqttHandled::class.java)
         }
     }
 }
