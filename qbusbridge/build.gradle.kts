@@ -17,6 +17,7 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.10.+")
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
+    implementation("com.influxdb:influxdb-client-java:1.13.0")
 
     //testImplementation("io.quarkus:quarkus-junit5")
     //testImplementation("io.kotest:kotest-runner-junit5-jvm:4.3.0")

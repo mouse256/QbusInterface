@@ -16,7 +16,7 @@ class AddressStatus(
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         const val SUBADDRESS_ALL = 0xFF.toByte()
         operator fun invoke(cmdArray: ByteArray): AddressStatus {
-            LOG.info("Address status! -- {}", Common.bytesToHex(cmdArray))
+            LOG.debug("Address status! -- {}", Common.bytesToHex(cmdArray))
             val write = (cmdArray[1].toInt() and 0xF0).shr(7) == 1
             val address = cmdArray[2]
             val subAddress = cmdArray[3] //0xFF = all
@@ -26,7 +26,7 @@ class AddressStatus(
             val size = cmdArray[6]
             val data = cmdArray.copyOfRange(8, 8 + size)
 
-            LOG.info(
+            LOG.debug(
                 "Data: Address: 0x{}0x{}-- {}",
                 Common.byteToHex(address),
                 Common.byteToHex(subAddress),

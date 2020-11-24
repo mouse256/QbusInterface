@@ -13,7 +13,7 @@ class Event(val address: Byte, val data: ByteArray) : DataType {
             val address = cmdArray[2]
             val data = cmdArray.copyOfRange(3, 3 + 4)
 
-            LOG.info("Event: Address: 0x{}-- {}", Common.byteToHex(address), Common.bytesToHex(data))
+            LOG.debug("Event: Address: 0x{}-- {}", Common.byteToHex(address), Common.bytesToHex(data))
             return Event(address, data)
         }
     }

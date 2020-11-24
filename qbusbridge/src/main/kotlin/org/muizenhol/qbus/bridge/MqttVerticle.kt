@@ -9,10 +9,7 @@ import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
-import org.muizenhol.qbus.bridge.type.MqttHandled
-import org.muizenhol.qbus.bridge.type.MqttItemWrapper
-import org.muizenhol.qbus.bridge.type.MqttType
-import org.muizenhol.qbus.bridge.type.StatusRequest
+import org.muizenhol.qbus.bridge.type.*
 import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -99,14 +96,17 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
     private fun publish(item: MqttItemWrapper): MqttHandled {
         //TODO: fix
-        //states.computeIfAbsent(item.serial) { mutableMapOf() }
-        //states[item.serial]?.put(item.id, State(type, payload, item.name, item.place))
-        return when (item.data) {
-            is SdOutputOnOff -> publish(item, item.data.asInt().toString(), "state")
-            is SdOutputDimmer -> publish(item, item.data.asInt().toString(), "state")
+        /*
+        val map = states.computeIfAbsent(item.serial) { mutableMapOf() }
+        map.put(data.id, State(data.typeName, payload, data.name, data.place.name))*/
+
+        val data = item.data
+        return when (data) {
+            is SdOutputOnOff -> publish(item, data.asInt().toString(), "state")
+            is SdOutputDimmer -> publish(item, data.asInt().toString(), "state")
             is SdOutputThermostat -> {
-                publish(item, item.data.getTempSet().toString(), "set")
-                publish(item, item.data.getTempMeasured().toString(), "measured")
+                publish(item, data.getTempSet().toString(), "set")
+                publish(item, data.getTempMeasured().toString(), "measured")
             }
         }
     }
@@ -151,20 +151,33 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             "qbus/+/sensor/+/+/command",
             MqttQoS.AT_LEAST_ONCE.value()
         )
+        mqttClient.subscribe(
+            "/airquality/+/sensor/+",
+            MqttQoS.AT_LEAST_ONCE.value()
+        )
     }
 
     private fun handleOpenhabEvent(msg: MqttPublishMessage) {
-        LOG.info("Got msg on {}", msg.topicName())
+        LOG.debug("Got msg on {}", msg.topicName())
         val matcher = PATTERN_COMMAND.matcher(msg.topicName())
         if (matcher.matches()) {
             val serial = matcher.group(1)
             val type = matcher.group(2)
             val id = matcher.group(3).toInt()
             val payload = msg.payload().toString(StandardCharsets.UTF_8)
-            LOG.info("Got {} data for {}: {}", type, id, payload)
+            LOG.debug("Got {} data for {}: {}", type, id, payload)
             toQbus(serial, type, payload, id)
         } else {
-            LOG.info("Topic not matched")
+            val matcher2 = PATTERN_AIRQUALITY.matcher(msg.topicName())
+            if (matcher2.matches()) {
+                val name = matcher2.group(1)
+                val sensor = matcher2.group(2)
+                msg.payload().toString(StandardCharsets.UTF_8).toDoubleOrNull()?.let { data ->
+                    vertx.eventBus().publish(ADDRESS_SENSOR, MqttSensorItem(name, sensor, data))
+                }
+            } else {
+                LOG.debug("Topic not matched")
+            }
         }
     }
 
@@ -236,7 +249,9 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         private val PATTERN_COMMAND = Pattern.compile("qbus/([^/]+)/sensor/([^/]+)/(\\d+)/command")
+        private val PATTERN_AIRQUALITY = Pattern.compile("^/airquality/([^/]+)/sensor/([^/]+)$")
         val ADDRESS = "address_mqtt_verticle"
+        val ADDRESS_SENSOR = "address_mqtt_sensor"
         private val OBJECT_MAPPER = ObjectMapper()
     }
 

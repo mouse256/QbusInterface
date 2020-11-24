@@ -2,10 +2,12 @@ package org.muizenhol.qbus.bridge
 
 import io.quarkus.runtime.Startup
 import io.vertx.core.AsyncResult
+import io.vertx.core.DeploymentOptions
 import io.vertx.core.Vertx
 import org.muizenhol.qbus.DataHandler
 import org.muizenhol.qbus.bridge.type.MqttHandled
 import org.muizenhol.qbus.bridge.type.MqttItemWrapper
+import org.muizenhol.qbus.bridge.type.MqttSensorItem
 import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -40,11 +42,17 @@ class ControllerHandler {
         val password = getOrThrow(prop, "password")
         val serial = getOrThrow(prop, "serial")
         val host = getOrThrow(prop, "host")
+        val influxToken = getOrThrow(prop,"influx.token")
+        val influxUrl = getOrThrow(prop,"influx.url")
 
         mqttHost = getOrThrow(prop, "mqtt.host")
         val mqttPort = prop.getOrDefault("mqtt.port", 1883) as Int
 
         registerVertxCodecs(vertx)
+
+        val influxVerticle = InfluxVerticle(influxToken, influxUrl)
+        vertx.deployVerticle(influxVerticle, DeploymentOptions().setWorker(true))
+
         val mqttVerticle = MqttVerticle(mqttHost, mqttPort)
         vertx.deployVerticle(mqttVerticle)
 
@@ -85,12 +93,14 @@ class ControllerHandler {
             LocalOnlyCodec.register(vertx, MqttItemWrapper::class.java)
             LocalOnlyCodec.register(vertx, StatusRequest::class.java)
             LocalOnlyCodec.register(vertx, MqttHandled::class.java)
+            LocalOnlyCodec.register(vertx, MqttSensorItem::class.java)
         }
 
         fun unregisterVertxCodecs(vertx: Vertx) {
             LocalOnlyCodec.unregister(vertx, MqttItemWrapper::class.java)
             LocalOnlyCodec.unregister(vertx, StatusRequest::class.java)
             LocalOnlyCodec.unregister(vertx, MqttHandled::class.java)
+            LocalOnlyCodec.unregister(vertx, MqttSensorItem::class.java)
         }
     }
 }

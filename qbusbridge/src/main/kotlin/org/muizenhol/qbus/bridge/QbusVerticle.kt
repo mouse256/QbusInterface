@@ -86,7 +86,7 @@ class QbusVerticle private constructor() : AbstractVerticle() {
      * Event from Qbus
      */
     private fun onDataUpdate(serial: String, data: SdOutput) {
-        vertx.eventBus().send(MqttVerticle.ADDRESS, MqttItemWrapper(serial, data))
+        vertx.eventBus().publish(MqttVerticle.ADDRESS, MqttItemWrapper(serial, data))
     }
 
     /**

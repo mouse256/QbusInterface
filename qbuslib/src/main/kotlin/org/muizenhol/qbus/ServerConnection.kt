@@ -85,7 +85,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         data.copyInto(cmdArray, 3)
         LOG.trace("s1: {}, s2: {}", cmdArray[1], cmdArray[2])
 
-        LOG.info(
+        LOG.debug(
             "Sending: {}{}", Common.bytesToHex(
                 PREFIX
             ), Common.bytesToHex(cmdArray)
@@ -280,7 +280,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
                 }
             }
             dataType?.run {
-                LOG.info("Parsed type: {}", dataType.typeId)
+                LOG.debug("Parsed type: {}", dataType.typeId)
                 listener.onEvent(dataType)
             }
         } catch (ex: DataParseException) {

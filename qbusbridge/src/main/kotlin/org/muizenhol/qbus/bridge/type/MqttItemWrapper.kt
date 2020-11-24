@@ -7,3 +7,5 @@ import org.muizenhol.qbus.sddata.SdOutputThermostat
 import java.lang.IllegalStateException
 
 data class MqttItemWrapper(val serial: String, val data: SdOutput)
+
+data class MqttSensorItem(val name: String, val sensor: String, val data: Double)
