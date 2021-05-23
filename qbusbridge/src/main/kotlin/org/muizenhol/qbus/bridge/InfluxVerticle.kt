@@ -58,7 +58,7 @@ class InfluxVerticle(val token: String, val url: String) : AbstractVerticle() {
     }
 
     /**
-     * Qbus to Influx
+     * Openhab sensor to Influx
      */
     private fun handle2(msg: Message<MqttSensorItem>) {
         val data = msg.body()
@@ -66,7 +66,7 @@ class InfluxVerticle(val token: String, val url: String) : AbstractVerticle() {
             .measurement(data.name)
             .addField(data.sensor, data.data)
 
-        LOG.debug("Writing sensor point for {}", data.name)
+        LOG.trace("Writing sensor point for {}", data.name)
         client.getWriteApi().use { writeApi -> writeApi.writePoint(bucket, org, point) }
     }
 

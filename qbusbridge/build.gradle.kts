@@ -9,7 +9,7 @@ dependencies {
     val qv = rootProject.ext.get("quarkusVersion") as String
 
     implementation("io.quarkus:quarkus-kotlin")
-    implementation(enforcedPlatform("io.quarkus:quarkus-universe-bom:${qv}"))
+    implementation(platform("io.quarkus:quarkus-universe-bom:${qv}"))
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
@@ -19,12 +19,21 @@ dependencies {
     implementation(project(":qbuslib"))
     implementation("com.influxdb:influxdb-client-java:1.13.0")
 
+    implementation(platform("software.amazon.awssdk:bom:2.16.+"))
+    implementation("software.amazon.awssdk:timestreamwrite")
+    implementation("software.amazon.awssdk:apache-client")
+
     //testImplementation("io.quarkus:quarkus-junit5")
     //testImplementation("io.kotest:kotest-runner-junit5-jvm:4.3.0")
     testImplementation("org.hamcrest:hamcrest:2.2")
     testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
     testImplementation("io.vertx:vertx-junit5:3.9.+")
-    testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j-impl:2.13.0")
+    //testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j-impl:2.13.0") //??
+
+    //Java SDK uses apache-commons-logging. Route over slf4j
+    runtimeOnly("org.slf4j:jcl-over-slf4j")
+    runtimeOnly("software.amazon.awssdk:sso")
+
 }
 
 group = "org.acme"

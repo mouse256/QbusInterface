@@ -38,12 +38,13 @@ class ControllerHandler {
         val file = File(System.getenv("QBUS_PROPERTY_FILE") ?: "/tmp/qbus.properties")
         FileReader(file)
             .use { fr -> prop.load(fr) }
+        val environment = Environment.valueOf(getOrThrow(prop, "environment").toUpperCase())
         val username = getOrThrow(prop, "username")
         val password = getOrThrow(prop, "password")
         val serial = getOrThrow(prop, "serial")
         val host = getOrThrow(prop, "host")
-        val influxToken = getOrThrow(prop,"influx.token")
-        val influxUrl = getOrThrow(prop,"influx.url")
+        val influxToken = getOrThrow(prop, "influx.token")
+        val influxUrl = getOrThrow(prop, "influx.url")
 
         mqttHost = getOrThrow(prop, "mqtt.host")
         val mqttPort = prop.getOrDefault("mqtt.port", 1883) as Int
@@ -52,6 +53,12 @@ class ControllerHandler {
 
         val influxVerticle = InfluxVerticle(influxToken, influxUrl)
         vertx.deployVerticle(influxVerticle, DeploymentOptions().setWorker(true))
+
+        val timestreamVerticle = TimestreamVerticle(
+            environment,
+            prop.getProperty("aws.accessId"), prop.getProperty("aws.accessSecret")
+        )
+        vertx.deployVerticle(timestreamVerticle, DeploymentOptions().setWorker(true))
 
         val mqttVerticle = MqttVerticle(mqttHost, mqttPort)
         vertx.deployVerticle(mqttVerticle)
@@ -64,6 +71,7 @@ class ControllerHandler {
         if (id.failed()) {
             LOG.error("Verticle deploy failed", id.cause())
         } else {
+            LOG.info("Verticle deployed: {}", id.result())
             verticles.add(id.result())
         }
     }
