@@ -1,13 +1,13 @@
-
-
 pluginManagement {
+    val quarkusPluginVersion: String by settings
+    val quarkusPluginId: String by settings
     repositories {
         mavenLocal()
         mavenCentral()
         gradlePluginPortal()
     }
     plugins {
-        id("io.quarkus").version("1.8.3.Final")
+        id(quarkusPluginId) version quarkusPluginVersion
     }
 }
 rootProject.name = "qbuscomm"

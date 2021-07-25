@@ -1,15 +1,18 @@
 plugins {
-    kotlin("jvm")
-    id("org.jetbrains.kotlin.plugin.allopen")
+    kotlin("jvm") // version "1.4.32"
+    kotlin("plugin.allopen") // version "1.4.32"
     id("io.quarkus")
 }
 
+val quarkusPlatformGroupId: String by project
+val quarkusPlatformArtifactId: String by project
+val quarkusPlatformVersion: String by project
 
 dependencies {
-    val qv = rootProject.ext.get("quarkusVersion") as String
-
+    implementation(enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"))
     implementation("io.quarkus:quarkus-kotlin")
-    implementation(platform("io.quarkus:quarkus-universe-bom:${qv}"))
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
@@ -39,13 +42,10 @@ dependencies {
 group = "org.acme"
 version = "1.0.0-SNAPSHOT"
 
-quarkus {
-    setOutputDirectory("$projectDir/build/classes/kotlin/main")
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
 }
-
-/*quarkusDev {
-    setSourceDir("$projectDir/src/main/kotlin")
-}*/
 
 allOpen {
     annotation("javax.ws.rs.Path")
@@ -53,16 +53,9 @@ allOpen {
     annotation("io.quarkus.test.junit.QuarkusTest")
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
-}
-
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-        javaParameters = true
-    }
+    kotlinOptions.jvmTarget = JavaVersion.VERSION_11.toString()
+    kotlinOptions.javaParameters = true
 }
 tasks {
     test {

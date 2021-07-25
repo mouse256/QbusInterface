@@ -36,6 +36,11 @@ class TimestreamVerticle(val environment: Environment, val accessKey: String?, v
 
     override fun start(startPromise: Promise<Void>) {
         LOG.info("Starting")
+        if (accessKey == null || accessSecret == null) {
+            LOG.warn("AWS access key/secret not set. Not starting timestream verticle")
+            startPromise.complete()
+            return
+        }
         dbName = "$DATABASE_NAME-${environment.name.toLowerCase()}"
         tableName = "$TABLE_NAME-${environment.name.toLowerCase()}"
         vertx.executeBlocking({

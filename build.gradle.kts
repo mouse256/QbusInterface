@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") version "1.4.0" apply false
-    id("org.jetbrains.kotlin.plugin.allopen").version("1.4.0").apply(false)
+    kotlin("jvm") version "1.4.32" apply false
+    kotlin("plugin.allopen") version "1.4.32" apply(false)
     base
 }
 
@@ -8,9 +8,9 @@ allprojects {
     repositories {
         mavenCentral()
     }
-    ext {
+    /*  ext {
         //set("supportLibraryVersion", "26.0.1")
         set("quarkusVersion", "1.8.3.Final")
-    }
+    }*/
 }
 
