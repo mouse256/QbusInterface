@@ -43,8 +43,8 @@ class ControllerHandler {
         val password = getOrThrow(prop, "password")
         val serial = getOrThrow(prop, "serial")
         val host = getOrThrow(prop, "host")
-        val influxToken = getOrThrow(prop, "influx.token")
-        val influxUrl = getOrThrow(prop, "influx.url")
+        val influxToken = prop.getProperty("influx.token")
+        val influxUrl = prop.getProperty("influx.url")
 
         mqttHost = getOrThrow(prop, "mqtt.host")
         val mqttPort = prop.getOrDefault("mqtt.port", 1883) as Int

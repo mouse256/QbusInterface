@@ -8,7 +8,6 @@ import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.DataHandler
-import org.muizenhol.qbus.bridge.type.MqttHandled
 import org.muizenhol.qbus.bridge.type.MqttItemWrapper
 import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.muizenhol.qbus.sddata.SdOutput

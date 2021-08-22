@@ -18,15 +18,20 @@ import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 
 
-class InfluxVerticle(val token: String, val url: String) : AbstractVerticle() {
+class InfluxVerticle(private val token: String?, private val url: String?) : AbstractVerticle() {
     lateinit var client: InfluxDBClient
     lateinit var consumer: MessageConsumer<MqttItemWrapper>
     lateinit var consumerSensor: MessageConsumer<MqttSensorItem>
-    val bucket = "domotica"
+    private val bucket = "domotica"
     val org = "muizenhol"
 
     override fun start(startPromise: Promise<Void>) {
         LOG.info("Starting")
+        if (token == null || url == null) {
+            LOG.warn("Influx token/url not set. Not starting influx verticle")
+            startPromise.complete()
+            return
+        }
 
         client = InfluxDBClientFactory.create(url, token.toCharArray(), org)
         consumer = vertx.eventBus().localConsumer(MqttVerticle.ADDRESS, this::handle)
