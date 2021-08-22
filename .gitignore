@@ -1,7 +1,7 @@
 .gradle
 .idea
 build/
-qbus.properties
+/qbus.properties
 out.json
 .swp
 *.tcpdump

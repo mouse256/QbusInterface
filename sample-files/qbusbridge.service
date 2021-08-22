@@ -1,0 +1,15 @@
+[Unit]
+Description=QBus MQTT bridge
+After=multi-user.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=quarkus
+Environment="QBUS_PROPERTY_FILE=/opt/qbus/qbus.properties"
+ExecStart=java -Xmx64M -jar /opt/qbus/qbusbridge-runner.jar
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
