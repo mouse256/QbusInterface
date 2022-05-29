@@ -18,7 +18,7 @@ dependencies {
     testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
     // https://mvnrepository.com/artifact/org.hamcrest/hamcrest
     testImplementation("org.hamcrest:hamcrest:2.2")
-    testRuntimeOnly ("org.apache.logging.log4j:log4j-slf4j-impl:2.13.0")
+    testRuntimeOnly ("org.apache.logging.log4j:log4j-slf4j-impl:2.15.0")
 
 }
 

@@ -31,7 +31,7 @@ dependencies {
     testImplementation("org.hamcrest:hamcrest:2.2")
     testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
     testImplementation("io.vertx:vertx-junit5:3.9.+")
-    //testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j-impl:2.13.0") //??
+    //testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j-impl:2.15.0") //??
 
     //Java SDK uses apache-commons-logging. Route over slf4j
     runtimeOnly("org.slf4j:jcl-over-slf4j")
