@@ -28,9 +28,13 @@ tasks.withType<Test> {
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }*/
 }
-configure<JavaPluginConvention> {
-    sourceCompatibility = JavaVersion.VERSION_11
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(11))
+    }
 }
+
 tasks {
     compileKotlin {
         kotlinOptions.jvmTarget = "11"

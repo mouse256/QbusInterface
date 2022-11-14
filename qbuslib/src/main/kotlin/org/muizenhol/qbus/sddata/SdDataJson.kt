@@ -34,6 +34,7 @@ data class SdDataJson(
         @JsonProperty("Correction") val correction: Int? = null,
         @JsonProperty("Offset") val offset: Int? = null,
         @JsonProperty("HasSensor") val hasSensor: Boolean? = null,
-        @JsonProperty("Unit") val unit: String? = null
+        @JsonProperty("Unit") val unit: String? = null,
+        @JsonProperty("NumberOfColours") val numberOfColours: Int? = null,
     )
 }
