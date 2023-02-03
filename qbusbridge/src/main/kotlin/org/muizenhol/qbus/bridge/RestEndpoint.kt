@@ -59,7 +59,7 @@ class ExampleResource {
                 .forEach { outpair ->
                     val output = outpair.second
                     val mqttName = outpair.first.mqttName
-                    val type = if (output.readonly) "string" else outpair.first.getOpenhabItem().toLowerCase()
+                    val type = if (output.readonly) "string" else outpair.first.getOpenhabItem().lowercase()
                     out.append("  Thing topic ${formatName("thing", output.name)} \"${output.name}\" @ \"QBus\" {\n")
                         .append("    Channels:\n")
 

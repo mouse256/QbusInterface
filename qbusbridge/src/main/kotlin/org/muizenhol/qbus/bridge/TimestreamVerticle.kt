@@ -39,8 +39,8 @@ class TimestreamVerticle(val environment: Environment, val accessKey: String?, v
             startPromise.complete()
             return
         }
-        dbName = "$DATABASE_NAME-${environment.name.toLowerCase()}"
-        tableName = "$TABLE_NAME-${environment.name.toLowerCase()}"
+        dbName = "$DATABASE_NAME-${environment.name.lowercase()}"
+        tableName = "$TABLE_NAME-${environment.name.lowercase()}"
         vertx.executeBlocking({
             timestreamWriteClient = buildWriteClient()
             val tName = timestreamWriteClient

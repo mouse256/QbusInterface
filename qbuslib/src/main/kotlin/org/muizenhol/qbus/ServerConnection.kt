@@ -24,7 +24,8 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
 
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
-        private val PREFIX = byteArrayOf('Q'.toByte(), 'B'.toByte(), 'U'.toByte(), 'S'.toByte(), 0, 0, 0, 0, 0)
+        private val PREFIX = byteArrayOf('Q'.code.toByte(), 'B'.code.toByte(),
+            'U'.code.toByte(), 'S'.code.toByte(), 0, 0, 0, 0, 0)
         private const val STOP_BYTE: Byte = 0x23 //end-of-transmission
         const val START_BYTE: Byte = 0x2A //*
         private const val BYTE_MSG: Byte = 0xFF.toByte()

@@ -10,10 +10,7 @@ import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
 import org.muizenhol.qbus.bridge.type.MqttItemWrapper
 import org.muizenhol.qbus.bridge.type.MqttSensorItem
-import org.muizenhol.qbus.sddata.SdOutputDimmer
-import org.muizenhol.qbus.sddata.SdOutputOnOff
-import org.muizenhol.qbus.sddata.SdOutputThermostat
-import org.muizenhol.qbus.sddata.SdOutputTimer
+import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
@@ -55,6 +52,7 @@ class InfluxVerticle(private val token: String?, private val url: String?) : Abs
             is SdOutputOnOff -> point.addField("value", data.asInt())
             is SdOutputDimmer -> point.addField("value", data.asInt())
             is SdOutputTimer -> point.addField("value", data.asInt())
+            is SdOutputTimer2 -> point.addField("value", data.asInt())
             is SdOutputThermostat -> point
                 .addField("set", data.getTempSet())
                 .addField("measured", data.getTempMeasured())

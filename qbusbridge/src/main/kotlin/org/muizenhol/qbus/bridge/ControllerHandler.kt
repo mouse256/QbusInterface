@@ -38,7 +38,7 @@ class ControllerHandler {
         val file = File(System.getenv("QBUS_PROPERTY_FILE") ?: "/tmp/qbus.properties")
         FileReader(file)
             .use { fr -> prop.load(fr) }
-        val environment = Environment.valueOf(getOrThrow(prop, "environment").toUpperCase())
+        val environment = Environment.valueOf(getOrThrow(prop, "environment").uppercase())
         val username = getOrThrow(prop, "username")
         val password = getOrThrow(prop, "password")
         val serial = getOrThrow(prop, "serial")
