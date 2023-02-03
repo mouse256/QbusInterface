@@ -7,9 +7,7 @@ import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
 import org.muizenhol.qbus.bridge.type.MqttItemWrapper
 import org.muizenhol.qbus.bridge.type.MqttSensorItem
-import org.muizenhol.qbus.sddata.SdOutputDimmer
-import org.muizenhol.qbus.sddata.SdOutputOnOff
-import org.muizenhol.qbus.sddata.SdOutputThermostat
+import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
@@ -123,6 +121,12 @@ class TimestreamVerticle(val environment: Environment, val accessKey: String?, v
 
         val recordsRaw: List<Record> = when (data) {
             is SdOutputOnOff -> listOf(
+                Record.builder().measureName("output").measureValue(data.asInt().toString()).build()
+            )
+            is SdOutputTimer -> listOf(
+                Record.builder().measureName("output").measureValue(data.asInt().toString()).build()
+            )
+            is SdOutputTimer2 -> listOf(
                 Record.builder().measureName("output").measureValue(data.asInt().toString()).build()
             )
             is SdOutputDimmer -> listOf(

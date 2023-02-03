@@ -52,9 +52,9 @@ class SdDataParser {
 
     private fun isReadOnly(name: String): Boolean {
         //TODO: make dynamic
-        return name.toLowerCase().startsWith("actuator_")
-                || name.toLowerCase().startsWith("wp_")
-                || name.toLowerCase().startsWith("z_")
+        return name.lowercase().startsWith("actuator_")
+                || name.lowercase().startsWith("wp_")
+                || name.lowercase().startsWith("z_")
     }
 
     private fun toOutput(outJson: SdDataJson.Outputs, place: SdDataStruct.Place): SdOutput? {
@@ -65,6 +65,27 @@ class SdDataParser {
         return when (type) {
             SdDataStruct.Type.ON_OFF
             -> SdOutputOnOff(
+                name = outJson.originalName,
+                id = outJson.id,
+                address = outJson.address.toByte(),
+                subAddress = outJson.subAddress.toByte(),
+                controllerId = outJson.controllerId,
+                place = place,
+                readonly = isReadOnly(outJson.originalName),
+            )
+            SdDataStruct.Type.TIMER
+            ->
+                SdOutputTimer(
+                name = outJson.originalName,
+                id = outJson.id,
+                address = outJson.address.toByte(),
+                subAddress = outJson.subAddress.toByte(),
+                controllerId = outJson.controllerId,
+                place = place,
+                readonly = isReadOnly(outJson.originalName),
+            )
+            SdDataStruct.Type.TIMER2
+            -> SdOutputTimer2(
                 name = outJson.originalName,
                 id = outJson.id,
                 address = outJson.address.toByte(),
@@ -99,7 +120,12 @@ class SdDataParser {
                     readonly = isReadOnly(outJson.originalName)
                 )
             }
-            else -> null
+            else -> {
+                LOG.info("Unknown type: {} -- {} (address: {}, subaddress: {})", outJson.typeId,
+                    outJson.originalName,
+                    Common.byteToHex(outJson.address.toByte()), Common.byteToHex(outJson.subAddress.toByte()))
+                null
+            }
         }
     }
 
@@ -155,8 +181,9 @@ data class SdDataStruct(
         UNKNOWN(-1),
         ON_OFF(1),
         DIMMER1B(3), //1 button dimmer
-        DIMMER2B(4), //2 button dimmier
+        DIMMER2B(4), //2 button dimmer
         TIMER(5),
+        TIMER2(6), //Staircase timer. Resets to max value on each press.
         SHUTTER(24),
         THERMOSTAT(25),
         THERMOSTAT2(15), //no clue what the difference is with the other thermostat
@@ -242,6 +269,85 @@ data class SdOutputOnOff(
 
     override fun update(newData: SdOutput): Boolean {
         if (newData is SdOutputOnOff) {
+            if (value != newData.value) {
+                value = newData.value
+                return true
+            }
+        } else {
+            LOG.warn("Invalid data type: {}", newData.javaClass)
+        }
+        return false
+    }
+}
+
+data class SdOutputTimer(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val subAddress: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput(), SingleValue {
+    override var value: Byte = 0x00
+    override val typeName = "timer"
+
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
+    override fun printValue(): String = "0x" + Common.byteToHex(value)
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
+        val updated = singleValueUpdate(this, newData)
+        if (value > 0x00) {
+            // this value probably means how long the timer will be running
+            // but since I don't understand it properly, just model as on-off
+            value = 0xFF.toByte()
+        }
+        return updated
+    }
+    fun asInt(): Int = (value.toInt() and 0xff)
+
+    override fun update(newData: SdOutput): Boolean {
+        if (newData is SdOutputTimer) {
+            if (value != newData.value) {
+                value = newData.value
+                return true
+            }
+        } else {
+            LOG.warn("Invalid data type: {}", newData.javaClass)
+        }
+        return false
+    }
+}
+
+//Timer2: resets to max value on each press.
+data class SdOutputTimer2(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val subAddress: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput(), SingleValue {
+    override var value: Byte = 0x00
+    override val typeName = "timer2"
+
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
+    override fun printValue(): String = "0x" + Common.byteToHex(value)
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
+        val updated = singleValueUpdate(this, newData)
+        if (value > 0x00) {
+            // this value probably means how long the timer will be running
+            // but since I don't understand it properly, just model as on-off
+            value = 0xFF.toByte()
+        }
+        return updated
+    }
+    fun asInt(): Int = (value.toInt() and 0xff)
+
+    override fun update(newData: SdOutput): Boolean {
+        if (newData is SdOutputTimer2) {
             if (value != newData.value) {
                 value = newData.value
                 return true

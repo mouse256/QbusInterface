@@ -104,6 +104,8 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         return when (data) {
             is SdOutputOnOff -> publish(item, data.asInt().toString(), "state")
             is SdOutputDimmer -> publish(item, data.asInt().toString(), "state")
+            is SdOutputTimer -> publish(item, data.asInt().toString(), "state")
+            is SdOutputTimer2 -> publish(item, data.asInt().toString(), "state")
             is SdOutputThermostat -> {
                 publish(item, data.getTempSet().toString(), "set")
                 publish(item, data.getTempMeasured().toString(), "measured")

@@ -1,9 +1,6 @@
 package org.muizenhol.qbus.bridge.type
 
-import org.muizenhol.qbus.sddata.SdOutput
-import org.muizenhol.qbus.sddata.SdOutputDimmer
-import org.muizenhol.qbus.sddata.SdOutputOnOff
-import org.muizenhol.qbus.sddata.SdOutputThermostat
+import org.muizenhol.qbus.sddata.*
 
 
 enum class MqttType(val mqttName: String) {
@@ -31,6 +28,8 @@ enum class MqttType(val mqttName: String) {
         fun fromQbus(item: SdOutput): MqttType {
             return when (item) {
                 is SdOutputOnOff -> ON_OFF
+                is SdOutputTimer -> ON_OFF
+                is SdOutputTimer2 -> ON_OFF
                 is SdOutputDimmer -> DIMMER
                 is SdOutputThermostat -> THERMOSTAT
             }
