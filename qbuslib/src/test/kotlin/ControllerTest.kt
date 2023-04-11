@@ -1,5 +1,4 @@
-import com.nhaarman.mockitokotlin2.doAnswer
-import com.nhaarman.mockitokotlin2.mock
+import io.kotest.core.Tuple2
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
 import io.kotest.core.test.TestResult
@@ -9,6 +8,9 @@ import org.hamcrest.MatcherAssert.assertThat
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.fail
 import org.mockito.ArgumentMatchers.*
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.spy
 import org.muizenhol.qbus.Common
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.ServerConnection
@@ -57,13 +59,14 @@ class ControllerTest : StringSpec() {
     private var stateHandler: (Controller.State) -> Unit = {}
     private var exceptionHandler: (QbusException) -> Unit = {}
 
-    override fun beforeTest(testCase: TestCase) {
+    override suspend fun beforeTest(testCase: TestCase) {
+        super.beforeTest(testCase)
         stateHandler = { _ -> }
         exceptionHandler = { ex -> LOG.error("Unhandled exception", ex) }
         loginOK = true
         serial = serialDefault
         prepareSDData()
-        serverConnection = mock {
+        serverConnection = mock<ServerConnection> {
             on { writeMsgVersion() } doAnswer {
                 LOG.debug("Mocking version")
                 sendEvent(Version("01.02", serial))
@@ -100,12 +103,14 @@ class ControllerTest : StringSpec() {
         )
     }
 
-    override fun afterTest(testCase: TestCase, result: TestResult) {
+
+    override fun afterTest(f: suspend (Tuple2<TestCase, TestResult>) -> Unit) {
         controller.close()
     }
 
     private fun void() {}
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun sendEvent(event: DataType): Job {
         //add a very short delay and handle from a different thread
         return GlobalScope.launch {

@@ -1,3 +1,4 @@
+import io.kotest.core.Tuple2
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
 import io.kotest.core.test.TestResult
@@ -25,7 +26,7 @@ class SendingTest : StringSpec() {
         private val HEX_ARRAY = "0123456789ABCDEF".toCharArray()
     }
 
-    override fun beforeTest(testCase: TestCase) {
+    override suspend fun beforeTest(testCase: TestCase) {
         data.clear()
         val stub = StubbedServerConnection { dataItem -> data.add(dataItem) }
         sc = stub.sc
@@ -39,7 +40,7 @@ class SendingTest : StringSpec() {
         ctrl.dataHandler = DataHandler(SdDataStruct("v1","serial", places, outputs))
     }
 
-    override fun afterTest(testCase: TestCase, result: TestResult) {
+    override fun afterTest(f: suspend (Tuple2<TestCase, TestResult>) -> Unit) {
         ctrl.close()
     }
 

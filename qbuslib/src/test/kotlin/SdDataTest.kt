@@ -1,9 +1,10 @@
 @file:Suppress("BlockingMethodInNonBlockingContext")
 
-import com.nhaarman.mockitokotlin2.mock
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
+import org.mockito.kotlin.mock
 import org.muizenhol.qbus.ServerConnection
+import org.muizenhol.qbus.ServerConnectionImpl
 import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
 import org.muizenhol.qbus.datatype.SDData
@@ -18,7 +19,7 @@ import java.net.Socket
 
 @ExperimentalUnsignedTypes
 class SdDataTest : StringSpec() {
-    lateinit var sc: ServerConnection
+    lateinit var sc: ServerConnectionImpl
     private val dataStruct = DataStruct()
     private val myListener = MyListener()
 
@@ -59,9 +60,9 @@ class SdDataTest : StringSpec() {
         }
     }
 
-    override fun beforeTest(testCase: TestCase) {
+    override suspend fun beforeTest(testCase: TestCase) {
         val socket = mock<Socket> {}
-        sc = ServerConnection(socket, myListener)
+        sc = ServerConnectionImpl(socket, myListener)
     }
 
     init {

@@ -1,13 +1,14 @@
 package org.muizenhol.qbus.datatype
 
 import org.muizenhol.qbus.ServerConnection
+import org.muizenhol.qbus.ServerConnectionImpl
 
 interface DataType {
     val typeId: DataTypeId
 
     fun serializeHeader(i1: Byte, i2: Byte, write: Boolean = false): ByteArray {
         val id: Byte = if (write) (typeId.id + 0x80.toByte()).toByte() else typeId.id //add 128
-        return byteArrayOf(ServerConnection.START_BYTE, id, i1, i2)
+        return byteArrayOf(ServerConnectionImpl.START_BYTE, id, i1, i2)
     }
 
     fun serialize(): ByteArray {

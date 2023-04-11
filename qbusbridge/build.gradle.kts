@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") // version "1.4.32"
-    kotlin("plugin.allopen") // version "1.4.32"
+    kotlin("jvm")
+    kotlin("plugin.allopen")
     id("io.quarkus")
 }
 
@@ -44,7 +44,7 @@ version = "1.0.0-SNAPSHOT"
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(11))
+        languageVersion.set(JavaLanguageVersion.of(17))
     }
 }
 
@@ -55,7 +55,7 @@ allOpen {
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions.jvmTarget = JavaVersion.VERSION_11.toString()
+    kotlinOptions.jvmTarget = JavaVersion.VERSION_17.toString()
     kotlinOptions.javaParameters = true
 }
 tasks {

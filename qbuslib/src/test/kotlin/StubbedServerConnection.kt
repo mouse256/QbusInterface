@@ -1,8 +1,9 @@
-import com.nhaarman.mockitokotlin2.any
-import com.nhaarman.mockitokotlin2.doAnswer
-import com.nhaarman.mockitokotlin2.doReturn
-import com.nhaarman.mockitokotlin2.mock
+import org.mockito.kotlin.any
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.mock
 import org.muizenhol.qbus.ServerConnection
+import org.muizenhol.qbus.ServerConnectionImpl
 import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
 import org.slf4j.LoggerFactory
@@ -56,6 +57,6 @@ class StubbedServerConnection(val onData: (ByteArray) -> Unit) {
         val socket = mock<Socket> {
             on { getOutputStream() } doReturn outputStream
         }
-        sc = ServerConnection(socket, MyListener())
+        sc = ServerConnectionImpl(socket, MyListener())
     }
 }

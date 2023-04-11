@@ -33,7 +33,7 @@ class Controller(
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
         private val serverConnectionCreator: (host: String, port: Int, listener: ServerConnection.Listener) -> ServerConnection =
             { host, port, listener ->
-                ServerConnection(host, port, listener)
+                ServerConnectionImpl(host, port, listener)
             }
     }
 

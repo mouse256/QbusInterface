@@ -1,7 +1,8 @@
-import com.nhaarman.mockitokotlin2.mock
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
+import org.mockito.kotlin.mock
 import org.muizenhol.qbus.ServerConnection
+import org.muizenhol.qbus.ServerConnectionImpl
 import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
 import org.slf4j.LoggerFactory
@@ -10,7 +11,7 @@ import java.net.Socket
 
 @ExperimentalUnsignedTypes
 class ParserTest : StringSpec() {
-    lateinit var sc: ServerConnection
+    lateinit var sc: ServerConnectionImpl
     val dataStruct = DataStruct()
 
     companion object {
@@ -31,9 +32,9 @@ class ParserTest : StringSpec() {
         }
     }
 
-    override fun beforeTest(testCase: TestCase) {
+    override suspend fun beforeTest(testCase: TestCase) {
         val socket = mock<Socket> {}
-        sc = ServerConnection(socket, MyListener())
+        sc = ServerConnectionImpl(socket, MyListener())
     }
 
     init {

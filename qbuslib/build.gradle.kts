@@ -14,9 +14,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.10.+")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.10.+")
 
-    testImplementation("io.kotest:kotest-runner-junit5-jvm:4.3.0")
-    testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
-    // https://mvnrepository.com/artifact/org.hamcrest/hamcrest
+    testImplementation("io.kotest:kotest-runner-junit5-jvm:5.5.5")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")
     testImplementation("org.hamcrest:hamcrest:2.2")
     testRuntimeOnly ("org.apache.logging.log4j:log4j-slf4j-impl:2.15.0")
 
@@ -31,15 +30,15 @@ tasks.withType<Test> {
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(11))
+        languageVersion.set(JavaLanguageVersion.of(17))
     }
 }
 
 tasks {
     compileKotlin {
-        kotlinOptions.jvmTarget = "11"
+        kotlinOptions.jvmTarget = "17"
     }
     compileTestKotlin {
-        kotlinOptions.jvmTarget = "11"
+        kotlinOptions.jvmTarget = "17"
     }
 }

@@ -12,20 +12,33 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import kotlin.experimental.and
 
-
-class ServerConnection(socket: Socket, private val listener: Listener) : AutoCloseable {
-    constructor(host: String, port: Int, listener: Listener) : this(Socket(host, port), listener)
-
+interface ServerConnection : AutoCloseable {
     interface Listener {
         fun onEvent(event: DataType)
         fun onParseException(ex: DataParseException)
         fun onConnectionClosed()
     }
 
+    fun login(username: String, password: String)
+    fun writeControllerOptions()
+    fun writegetFATData()
+    fun writegetSDData(part: Int = 0)
+    fun writeGetAddressStatus(address: Byte)
+    fun write(data: DataType)
+    fun startDataReader()
+    fun readWelcome()
+    fun writeMsgVersion()
+}
+
+class ServerConnectionImpl(socket: Socket, private val listener: ServerConnection.Listener) : ServerConnection {
+    constructor(host: String, port: Int, listener: ServerConnection.Listener) : this(Socket(host, port), listener)
+
     companion object {
         private val LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
-        private val PREFIX = byteArrayOf('Q'.code.toByte(), 'B'.code.toByte(),
-            'U'.code.toByte(), 'S'.code.toByte(), 0, 0, 0, 0, 0)
+        private val PREFIX = byteArrayOf(
+            'Q'.code.toByte(), 'B'.code.toByte(),
+            'U'.code.toByte(), 'S'.code.toByte(), 0, 0, 0, 0, 0
+        )
         private const val STOP_BYTE: Byte = 0x23 //end-of-transmission
         const val START_BYTE: Byte = 0x2A //*
         private const val BYTE_MSG: Byte = 0xFF.toByte()
@@ -38,13 +51,13 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
     private var running = true
     private var bgThread: Job? = null
 
-    fun readWelcome() {
+    override fun readWelcome() {
         val buf = ByteArray(256)
         val size = inStream.read(buf)
         LOG.info("Welcome: {}", String(buf.copyOfRange(0, size), StandardCharsets.UTF_8))
     }
 
-    fun startDataReader() {
+    override fun startDataReader() {
         LOG.info("Starting datareader")
         bgThread = GlobalScope.launch {
             try {
@@ -96,7 +109,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         out.flush()
     }
 
-    fun writeMsgVersion() {
+    override fun writeMsgVersion() {
         val cmd: Byte = 0x07
         val data: Byte = 0x04
 
@@ -104,19 +117,19 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         formatMsgAndSend(cmdArray)
     }
 
-    fun writeControllerOptions() {
+    override fun writeControllerOptions() {
         write(ControllerOptions(0x0D, byteArrayOf(0x07)))
     }
 
-    fun writeGetAddressStatus(address: Byte) {
+    override fun writeGetAddressStatus(address: Byte) {
         write(AddressStatus(address, AddressStatus.SUBADDRESS_ALL))
     }
 
-    fun write(data: DataType) {
+    override fun write(data: DataType) {
         formatMsgAndSend(data.serialize())
     }
 
-    fun writegetSDData(part: Int = 0) {
+    override fun writegetSDData(part: Int) {
         val cmd: Byte = 0x44
         val i1: Byte = 0x29
         var i2: Byte = 0xFF.toByte()
@@ -129,11 +142,11 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
         formatMsgAndSend(cmdArray)
     }
 
-    fun writegetFATData() {
+    override fun writegetFATData() {
         formatMsgAndSend(FatData().serialize())
     }
 
-    fun login(username: String, password: String) {
+    override fun login(username: String, password: String) {
         val cmdArray = ByteArray(34)
         cmdArray[0] = START_BYTE
         cmdArray[1] = 0x00
@@ -262,6 +275,7 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
                                 + Common.bytesToHex(cmdArray)
                     )
                 }
+
                 false -> when (type) {
                     DataTypeId.VERSION.id -> Version(cmdArray)
                     DataTypeId.CONTROLLER_OPTIONS.id -> ControllerOptions(0x00, byteArrayOf())
@@ -271,10 +285,12 @@ class ServerConnection(socket: Socket, private val listener: Listener) : AutoClo
                     DataTypeId.SD_DATA.id -> SDData.parse(cmdArray)
                     else -> {
                         if (LOG.isDebugEnabled) {
-                            LOG.debug("Ingoring unknown msg type 0x{} -- {}",Common.byteToHex(type),
-                                     Common.bytesToHex(cmdArray))
+                            LOG.debug(
+                                "Ingoring unknown msg type 0x{} -- {}", Common.byteToHex(type),
+                                Common.bytesToHex(cmdArray)
+                            )
                         } else {
-                            LOG.info("Ingoring unknown msg type 0x{}",Common.byteToHex(type))
+                            LOG.info("Ingoring unknown msg type 0x{}", Common.byteToHex(type))
                         }
                         null
                     }
