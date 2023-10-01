@@ -16,22 +16,19 @@ dependencies {
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.5")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.10.+")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.2")
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
-    implementation("com.influxdb:influxdb-client-java:1.13.0")
+    implementation("com.influxdb:influxdb-client-java:6.8.0")
 
-    implementation(platform("software.amazon.awssdk:bom:2.16.+"))
+    implementation(platform("software.amazon.awssdk:bom:2.20.44"))
     implementation("software.amazon.awssdk:timestreamwrite")
     implementation("software.amazon.awssdk:apache-client")
 
-    //testImplementation("io.quarkus:quarkus-junit5")
-    //testImplementation("io.kotest:kotest-runner-junit5-jvm:4.3.0")
     testImplementation("org.hamcrest:hamcrest:2.2")
-    testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
-    testImplementation("io.vertx:vertx-junit5:3.9.+")
-    //testRuntimeOnly("org.apache.logging.log4j:log4j-slf4j-impl:2.15.0") //??
+    testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")
+    testImplementation("io.vertx:vertx-junit5:4.4.1")
 
     //Java SDK uses apache-commons-logging. Route over slf4j
     runtimeOnly("org.slf4j:jcl-over-slf4j")

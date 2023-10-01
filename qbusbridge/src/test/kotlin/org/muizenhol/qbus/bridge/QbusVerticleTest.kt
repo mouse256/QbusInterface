@@ -1,7 +1,5 @@
 package org.muizenhol.qbus.bridge
 
-import com.nhaarman.mockitokotlin2.doAnswer
-import com.nhaarman.mockitokotlin2.mock
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
 import io.vertx.junit5.Timeout
@@ -13,6 +11,8 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ExtendWith
+import org.mockito.kotlin.doAnswer
+import org.mockito.kotlin.mock
 import org.muizenhol.qbus.Controller
 import org.muizenhol.qbus.DataHandler
 import org.muizenhol.qbus.bridge.type.MqttItemWrapper

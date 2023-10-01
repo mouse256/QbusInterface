@@ -110,6 +110,10 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 publish(item, data.getTempSet().toString(), "set")
                 publish(item, data.getTempMeasured().toString(), "measured")
             }
+            is SdOutputAudio -> {
+                LOG.warn("Audio change")
+                MqttHandled.OK
+            }
         }
     }
 
@@ -206,6 +210,10 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                         val pay = convertThermostatPayload(payload) ?: return
                         setTemp(pay)
                     }
+                MqttType.EVENT -> {
+                    LOG.warn("Event can't be translated to Qbus")
+                    return
+                }
             }
             LOG.debug("Sending to Qbus verticle")
             vertx.eventBus().send(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM, MqttItemWrapper(serial, data))

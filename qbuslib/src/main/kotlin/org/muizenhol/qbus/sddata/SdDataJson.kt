@@ -36,5 +36,9 @@ data class SdDataJson(
         @JsonProperty("HasSensor") val hasSensor: Boolean? = null,
         @JsonProperty("Unit") val unit: String? = null,
         @JsonProperty("NumberOfColours") val numberOfColours: Int? = null,
+        @JsonProperty("VolumeUpId") val volumeUpId: Int,
+        @JsonProperty("VolumeDownId") val volumeDownId: Int,
+        @JsonProperty("PlayPauseId") val playPauseId: Int,
+        @JsonProperty("FavoritesId") val favoritesId: Int,
     )
 }

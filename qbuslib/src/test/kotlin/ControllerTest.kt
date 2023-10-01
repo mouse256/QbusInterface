@@ -42,7 +42,7 @@ class ControllerTest : StringSpec() {
     private var loginOK = true
     private val serialDefault = "010203"
     private var serial = serialDefault
-    val outOnOff1 = SdDataJson.Outputs(
+    private val outOnOff1 = SdDataJson.Outputs(
         address = 1,
         subAddress = 0,
         controllerId = 0,
@@ -54,7 +54,11 @@ class ControllerTest : StringSpec() {
         system = true,
         eventsOnSd = true,
         placeId = 0, //TODO
-        iconNr = 1
+        iconNr = 1,
+        volumeUpId = 2,
+        volumeDownId = 3,
+        playPauseId = 4,
+        favoritesId = 5,
     )
     private var stateHandler: (Controller.State) -> Unit = {}
     private var exceptionHandler: (QbusException) -> Unit = {}

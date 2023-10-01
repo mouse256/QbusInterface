@@ -6,13 +6,16 @@ import org.muizenhol.qbus.sddata.*
 enum class MqttType(val mqttName: String) {
     ON_OFF("switch"),
     DIMMER("dimmer"),
-    THERMOSTAT("thermostat");
+    THERMOSTAT("thermostat"),
+    EVENT("event");
+
 
     fun getOpenhabChannelConfig(): String {
         return when (this) {
             ON_OFF -> "off=\"0\", on=\"255\""
             DIMMER -> "min=\"0\", max=\"100\", transformationPattern=\"JS:255to100.js\", transformationPatternOut=\"JS:100to255.js\""
             THERMOSTAT -> "min=\"0\", max=\"30\", step=\"0.5\", unit=\"°C\""
+            EVENT -> ""
         }
     }
 
@@ -21,6 +24,7 @@ enum class MqttType(val mqttName: String) {
             ON_OFF -> "Switch"
             DIMMER -> "Dimmer"
             THERMOSTAT -> "Number"
+            EVENT -> "Event"
         }
     }
 
@@ -32,6 +36,7 @@ enum class MqttType(val mqttName: String) {
                 is SdOutputTimer2 -> ON_OFF
                 is SdOutputDimmer -> DIMMER
                 is SdOutputThermostat -> THERMOSTAT
+                is SdOutputAudio -> EVENT
             }
         }
 

@@ -120,6 +120,16 @@ class SdDataParser {
                     readonly = isReadOnly(outJson.originalName)
                 )
             }
+            SdDataStruct.Type.AUDIO
+                -> SdOutputAudio(
+                    name = outJson.originalName,
+                    id = outJson.id,
+                    address = outJson.address.toByte(),
+                    subAddress = outJson.subAddress.toByte(),
+                    controllerId = outJson.controllerId,
+                    place = place,
+                    readonly = isReadOnly(outJson.originalName),
+                    )
             else -> {
                 LOG.info("Unknown type: {} -- {} (address: {}, subaddress: {})", outJson.typeId,
                     outJson.originalName,
@@ -187,6 +197,7 @@ data class SdDataStruct(
         SHUTTER(24),
         THERMOSTAT(25),
         THERMOSTAT2(15), //no clue what the difference is with the other thermostat
+        AUDIO(2),
     }
 }
 
@@ -501,6 +512,40 @@ data class SdOutputThermostat(
             }
         }
 
+    }
+}
+
+data class SdOutputAudio(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val subAddress: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput(), SingleValue {
+    override var value: Byte = 0x00
+    override val typeName = "Audio"
+
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
+    override fun printValue(): String = "0x" + Common.byteToHex(value)
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
+        return singleValueUpdate(this, newData)
+    }
+    fun asInt(): Int = (value.toInt() and 0xff)
+
+    override fun update(newData: SdOutput): Boolean {
+//        if (newData is SdOutputOnOff) {
+//            if (value != newData.value) {
+//                value = newData.value
+//                return true
+//            }
+//        } else {
+//            LOG.warn("Invalid data type: {}", newData.javaClass)
+//        }
+        LOG.warn("TODO: update audio value")
+        return false
     }
 }
 
