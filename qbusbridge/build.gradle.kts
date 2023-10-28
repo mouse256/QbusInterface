@@ -31,7 +31,7 @@ dependencies {
     testImplementation("io.vertx:vertx-junit5:4.4.1")
 
     //Java SDK uses apache-commons-logging. Route over slf4j
-    runtimeOnly("org.slf4j:jcl-over-slf4j")
+    runtimeOnly("org.slf4j:jcl-over-slf4j:2.0.9")
     runtimeOnly("software.amazon.awssdk:sso")
 
 }
@@ -46,8 +46,8 @@ java {
 }
 
 allOpen {
-    annotation("javax.ws.rs.Path")
-    annotation("javax.enterprise.context.ApplicationScoped")
+    annotation("jakarta.ws.rs.Path")
+    annotation("jakarta.enterprise.context.ApplicationScoped")
     annotation("io.quarkus.test.junit.QuarkusTest")
 }
 

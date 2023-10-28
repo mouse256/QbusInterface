@@ -14,6 +14,7 @@ import org.muizenhol.qbus.sddata.SdOutput
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
+import java.util.concurrent.Callable
 
 class QbusVerticle private constructor() : AbstractVerticle() {
 
@@ -71,13 +72,13 @@ class QbusVerticle private constructor() : AbstractVerticle() {
             LOG.debug("Qbus not yet initialized, ignoring request")
         } else {
             LOG.info("Publish current state")
-            vertx.executeBlocking(Handler<Promise<String>> {
-                dataHandler!!.data.outputs.values.forEach { out ->
-                    Thread.sleep(20) //add a small delay to avoid overloading the mqtt bus
-                    onDataUpdate(dataHandler!!.data.serialNumber, out)
+            vertx.executeBlocking(Callable {
+                    dataHandler!!.data.outputs.values.forEach { out ->
+                        Thread.sleep(20) //add a small delay to avoid overloading the mqtt bus
+                        onDataUpdate(dataHandler!!.data.serialNumber, out)
+                    }
                 }
-                it.complete()
-            }, Handler { /*nothing*/ })
+            )
         }
     }
 

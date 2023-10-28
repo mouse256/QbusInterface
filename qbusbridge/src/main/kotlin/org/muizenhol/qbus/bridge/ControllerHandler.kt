@@ -15,9 +15,9 @@ import java.io.File
 import java.io.FileReader
 import java.lang.invoke.MethodHandles
 import java.util.*
-import javax.annotation.PostConstruct
-import javax.annotation.PreDestroy
-import javax.enterprise.context.ApplicationScoped
+import jakarta.annotation.PostConstruct
+import jakarta.annotation.PreDestroy
+import jakarta.enterprise.context.ApplicationScoped
 
 @Startup
 @ApplicationScoped
