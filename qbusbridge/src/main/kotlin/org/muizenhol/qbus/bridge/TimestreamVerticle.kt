@@ -138,7 +138,8 @@ class TimestreamVerticle(val environment: Environment, val accessKey: String?, v
                     Record.builder().measureName("measured").measureValue(data.getTempMeasured().toString()).build()
                 )
             }
-            is SdOutputAudio -> {
+            is SdOutputAudio,
+            is SdOutputAudioGroup -> {
                 //it's an event, not state
                 return
             }

@@ -37,6 +37,7 @@ enum class MqttType(val mqttName: String) {
                 is SdOutputDimmer -> DIMMER
                 is SdOutputThermostat -> THERMOSTAT
                 is SdOutputAudio -> EVENT
+                is SdOutputAudioGroup -> ON_OFF
             }
         }
 

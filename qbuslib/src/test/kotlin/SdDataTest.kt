@@ -2,6 +2,8 @@
 
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
+import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.MatcherAssert.assertThat
 import org.mockito.kotlin.mock
 import org.muizenhol.qbus.ServerConnection
 import org.muizenhol.qbus.ServerConnectionImpl
@@ -9,6 +11,9 @@ import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.DataType
 import org.muizenhol.qbus.datatype.SDData
 import org.muizenhol.qbus.sddata.SdDataParser
+import org.muizenhol.qbus.sddata.SdOutputAudio
+import org.muizenhol.qbus.sddata.SdOutputAudioGroup
+import org.muizenhol.qbus.sddata.SdOutputOnOff
 import org.slf4j.LoggerFactory
 import java.io.BufferedOutputStream
 import java.io.File
@@ -110,6 +115,38 @@ class SdDataTest : StringSpec() {
         "Parsing json data" {
             val parser = SdDataParser()
             parser.parse(FileInputStream(File("out.json")))
+        }
+
+        "Parsing real data" {
+            val parser = SdDataParser()
+            val stream = this.javaClass.getResourceAsStream("/sddata.zip")
+                ?: throw IllegalStateException("Can't find resource sddata.zip")
+            parser.addData(stream.readAllBytes())
+            val parsed = parser.parse() ?: throw IllegalStateException("Can't parse data")
+
+            val outAudioBadkamer:SdOutputAudioGroup = parsed.outputs.values.first { out ->
+                out.name == "audio_badkamer" && out is SdOutputAudioGroup
+            } as SdOutputAudioGroup
+            LOG.debug("audio_bad: {}", outAudioBadkamer)
+            val audioBadkamerFav = parsed.outputs.values.first { it.id == outAudioBadkamer.favoritesId}
+            assertThat(audioBadkamerFav.name, equalTo("audio_badkamer (Fav.)"))
+            assertThat(audioBadkamerFav.javaClass, equalTo(SdOutputAudio::class.java))
+
+            val audioBadkamerVolDown =parsed.outputs.values.first { it.id == outAudioBadkamer.volumeDownId}
+            assertThat(audioBadkamerVolDown.name,equalTo("audio_badkamer (Vol-)"))
+            assertThat(audioBadkamerVolDown.id,equalTo(680))
+            assertThat(audioBadkamerVolDown.javaClass, equalTo(SdOutputAudio::class.java))
+
+            val audioBadkamerVolUp =parsed.outputs.values.first { it.id == outAudioBadkamer.volumeUpId}
+            assertThat(audioBadkamerVolUp.name,equalTo("audio_badkamer (Vol+)"))
+            assertThat(audioBadkamerVolUp.id,equalTo(676))
+            assertThat(audioBadkamerVolUp.javaClass, equalTo(SdOutputAudio::class.java))
+
+            val audioBadkamerPlayPause =parsed.outputs.values.first { it.id == outAudioBadkamer.playPauseId}
+            assertThat(audioBadkamerPlayPause.name,equalTo("audio_badkamer"))
+            assertThat(audioBadkamerPlayPause.id,equalTo(672))
+            assertThat(audioBadkamerPlayPause.javaClass, equalTo(SdOutputOnOff::class.java))
+
         }
 
     }

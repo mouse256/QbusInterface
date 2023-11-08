@@ -111,13 +111,13 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 publish(item, data.getTempMeasured().toString(), "measured")
             }
             is SdOutputAudio -> {
-                LOG.warn("Audio change")
-                MqttHandled.OK
+                publish(item, data.asInt().toString(), "event", false)
             }
+            is SdOutputAudioGroup -> MqttHandled.OK
         }
     }
 
-    private fun publish(item: MqttItemWrapper, payloadS: String, topic: String): MqttHandled {
+    private fun publish(item: MqttItemWrapper, payloadS: String, topic: String, retain: Boolean = true): MqttHandled {
         val type = MqttType.fromQbus(item.data)
         val payload = Buffer.buffer(payloadS)
 
@@ -126,7 +126,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             payload,
             MqttQoS.AT_LEAST_ONCE,
             false,
-            true
+            retain
         ) { ar ->
             if (ar.failed()) {
                 LOG.warn("Can't send MQTT message, restarting connection", ar.cause())

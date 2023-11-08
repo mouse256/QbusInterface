@@ -26,6 +26,7 @@ class SdDataParser {
 
     fun parse(): SdDataStruct? {
         LOG.info("Unzipping SD data")
+        //ByteArrayInputStream(data).copyTo(FileOutputStream(File("/tmp/out.zip")))
         ZipInputStream(ByteArrayInputStream(data)).use { zis ->
             var zipEntry = zis.nextEntry
             while (zipEntry != null) {
@@ -73,17 +74,19 @@ class SdDataParser {
                 place = place,
                 readonly = isReadOnly(outJson.originalName),
             )
+
             SdDataStruct.Type.TIMER
             ->
                 SdOutputTimer(
-                name = outJson.originalName,
-                id = outJson.id,
-                address = outJson.address.toByte(),
-                subAddress = outJson.subAddress.toByte(),
-                controllerId = outJson.controllerId,
-                place = place,
-                readonly = isReadOnly(outJson.originalName),
-            )
+                    name = outJson.originalName,
+                    id = outJson.id,
+                    address = outJson.address.toByte(),
+                    subAddress = outJson.subAddress.toByte(),
+                    controllerId = outJson.controllerId,
+                    place = place,
+                    readonly = isReadOnly(outJson.originalName),
+                )
+
             SdDataStruct.Type.TIMER2
             -> SdOutputTimer2(
                 name = outJson.originalName,
@@ -94,6 +97,7 @@ class SdDataParser {
                 place = place,
                 readonly = isReadOnly(outJson.originalName),
             )
+
             SdDataStruct.Type.DIMMER1B,
             SdDataStruct.Type.DIMMER2B
             -> SdOutputDimmer(
@@ -105,6 +109,7 @@ class SdDataParser {
                 place = place,
                 readonly = isReadOnly(outJson.originalName),
             )
+
             SdDataStruct.Type.THERMOSTAT,
             SdDataStruct.Type.THERMOSTAT2,
             -> {
@@ -120,20 +125,37 @@ class SdDataParser {
                     readonly = isReadOnly(outJson.originalName)
                 )
             }
+
             SdDataStruct.Type.AUDIO
-                -> SdOutputAudio(
+            -> SdOutputAudio(
+                name = outJson.originalName,
+                id = outJson.id,
+                address = outJson.address.toByte(),
+                subAddress = outJson.subAddress.toByte(),
+                controllerId = outJson.controllerId,
+                place = place,
+                readonly = isReadOnly(outJson.originalName),
+            )
+
+            SdDataStruct.Type.AUDIO2 ->
+                SdOutputAudioGroup(
                     name = outJson.originalName,
                     id = outJson.id,
-                    address = outJson.address.toByte(),
-                    subAddress = outJson.subAddress.toByte(),
                     controllerId = outJson.controllerId,
                     place = place,
-                    readonly = isReadOnly(outJson.originalName),
-                    )
+                    favoritesId = outJson.favoritesId,
+                    volumeUpId = outJson.volumeUpId,
+                    volumeDownId = outJson.volumeDownId,
+                    playPauseId = outJson.playPauseId,
+                )
+
+
             else -> {
-                LOG.info("Unknown type: {} -- {} (address: {}, subaddress: {})", outJson.typeId,
+                LOG.info(
+                    "Unknown type: {} -- {} (address: {}, subaddress: {})", outJson.typeId,
                     outJson.originalName,
-                    Common.byteToHex(outJson.address.toByte()), Common.byteToHex(outJson.subAddress.toByte()))
+                    Common.byteToHex(outJson.address.toByte()), Common.byteToHex(outJson.subAddress.toByte())
+                )
                 null
             }
         }
@@ -187,7 +209,7 @@ data class SdDataStruct(
         val name: String
     )
 
-    enum class Type(val id: Int) { //TODO: not sure if those id's are fixed?
+    enum class Type(val id: Int) {
         UNKNOWN(-1),
         ON_OFF(1),
         DIMMER1B(3), //1 button dimmer
@@ -198,6 +220,7 @@ data class SdDataStruct(
         THERMOSTAT(25),
         THERMOSTAT2(15), //no clue what the difference is with the other thermostat
         AUDIO(2),
+        AUDIO2(1004),
     }
 }
 
@@ -276,6 +299,7 @@ data class SdOutputOnOff(
     override fun update(newData: ByteArray, event: Boolean): Boolean {
         return singleValueUpdate(this, newData)
     }
+
     fun asInt(): Int = (value.toInt() and 0xff)
 
     override fun update(newData: SdOutput): Boolean {
@@ -315,6 +339,7 @@ data class SdOutputTimer(
         }
         return updated
     }
+
     fun asInt(): Int = (value.toInt() and 0xff)
 
     override fun update(newData: SdOutput): Boolean {
@@ -355,6 +380,7 @@ data class SdOutputTimer2(
         }
         return updated
     }
+
     fun asInt(): Int = (value.toInt() and 0xff)
 
     override fun update(newData: SdOutput): Boolean {
@@ -388,6 +414,7 @@ data class SdOutputDimmer(
     override fun update(newData: ByteArray, event: Boolean): Boolean {
         return singleValueUpdate(this, newData)
     }
+
     fun asInt(): Int = (value.toInt() and 0xff)
 
     override fun update(newData: SdOutput): Boolean {
@@ -414,7 +441,7 @@ data class SdOutputThermostat(
     private var value1: Byte = 0x00
     private var tempSet: Byte = 0x00
     private var tempMeasured: Byte = 0x00
-    private var mode: Mode= Mode.OFF
+    private var mode: Mode = Mode.OFF
     override val subAddress = 0x00.toByte()
     override val typeName = "Thermostat"
     override fun clone(): SdOutput {
@@ -484,7 +511,8 @@ data class SdOutputThermostat(
             if (value1 != newData.value1 ||
                 tempMeasured != newData.tempMeasured ||
                 tempSet != newData.tempSet ||
-                mode != newData.mode) {
+                mode != newData.mode
+            ) {
                 value1 = newData.value1
                 tempMeasured = newData.tempMeasured
                 tempSet = newData.tempSet
@@ -531,20 +559,53 @@ data class SdOutputAudio(
     override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
     override fun printValue(): String = "0x" + Common.byteToHex(value)
     override fun update(newData: ByteArray, event: Boolean): Boolean {
-        return singleValueUpdate(this, newData)
+        val update = singleValueUpdate(this, newData)
+        return update && (value != 0x0.toByte()) //setting to 0x0 should not trigger an update
     }
+
     fun asInt(): Int = (value.toInt() and 0xff)
 
     override fun update(newData: SdOutput): Boolean {
-//        if (newData is SdOutputOnOff) {
-//            if (value != newData.value) {
-//                value = newData.value
-//                return true
-//            }
-//        } else {
-//            LOG.warn("Invalid data type: {}", newData.javaClass)
-//        }
-        LOG.warn("TODO: update audio value")
+        LOG.warn("Not supported to update audio value")
+        return false
+    }
+}
+
+/**
+ * Sample
+ * 11:55:58.974 [pool-2-thread-1] INFO  org.muizenhol.qbus.sddata.SdDataParser -
+ * Outputs(address=0, subAddress=0, controllerId=1, id=32101, originalName=audio_badkamer,
+ * shortName=audio_badkam, typeId=1004, real=false, system=false, eventsOnSd=false,
+ * placeId=8, iconNr=0, rangeMin=null, rangeMax=null, correction=null, offset=null,
+ * hasSensor=null, unit=null, numberOfColours=null, volumeUpId=676,
+ * volumeDownId=680, playPauseId=672, favoritesId=684)
+ *
+ */
+data class SdOutputAudioGroup(
+    override val id: Int,
+    override val name: String,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    val volumeUpId: Int,
+    val volumeDownId: Int,
+    val playPauseId: Int,
+    val favoritesId: Int
+) : SdOutput() {
+    override val address: Byte = 0
+    override val subAddress: Byte = 0
+    override val typeName = "AudioGroup"
+    override val readonly = false
+
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = throw IllegalStateException("not supported")
+    override fun printValue(): String = "0x00"
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
+        LOG.debug("not supported to update SdOutputAudioGroup")
+        return false
+    }
+
+    override fun update(newData: SdOutput): Boolean {
+        LOG.debug("not supported to update SdOutputAudioGroup")
         return false
     }
 }

@@ -57,6 +57,7 @@ class InfluxVerticle(private val token: String?, private val url: String?) : Abs
                 .addField("set", data.getTempSet())
                 .addField("measured", data.getTempMeasured())
             is SdOutputAudio -> return
+            is SdOutputAudioGroup -> return
         }
 
         LOG.debug("Writing qbus point for {}", data.name)
