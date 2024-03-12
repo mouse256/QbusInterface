@@ -21,6 +21,7 @@ import java.util.regex.Pattern
 class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle() {
     lateinit var mqttClient: MqttClient
     lateinit var consumer: MessageConsumer<MqttItemWrapper>
+    lateinit var consumerInfo: MessageConsumer<SdDataStruct>
     var started = false
 
     override fun start() {
@@ -36,6 +37,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             vertx.eventBus().send(QbusVerticle.ADDRESS_STATUS, StatusRequest.SEND_ALL_STATES)
         }
         consumer = vertx.eventBus().localConsumer(ADDRESS, this::handle)
+        consumerInfo = vertx.eventBus().localConsumer(ADDRESS_INFO, this::handleInfo)
         mqttClient.closeHandler {
             LOG.info("Mqtt closed, restart")
             restart()
@@ -90,6 +92,48 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         msg.reply(res)
     }
 
+    data class Info(val id: Int, val name: String)
+
+    private fun handleInfo(msg: Message<SdDataStruct>) {
+        if (!started) {
+            LOG.warn("Got info msg but MQTT is not yet started")
+            return
+        }
+        val item = msg.body()
+//        val formatted = item.outputs.values.map { x -> x.typeName}
+//            .distinct()
+//            .associateWith { t ->
+//            item.outputs.values
+//                .filter { i -> i.typeName == t }
+//                .map { i -> Info(i.id, i.name) }
+//                .toList()
+//        }
+
+        item.outputs.values.map { x -> MqttType.fromQbus(x) }
+            .distinct().forEach { type ->
+                val items = item.outputs.values
+                    .filter { i -> MqttType.fromQbus(i) == type }
+                    .map { i -> Info(i.id, i.name) }
+                    .toList()
+                mqttClient.publish(
+                    "qbus/" + item.serialNumber + "/info/outputs/" + type.mqttName,
+                    Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(items)),
+                    MqttQoS.AT_LEAST_ONCE,
+                    false,
+                    true
+                ) { ar ->
+                    if (ar.failed()) {
+                        LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
+                        restart()
+                    } else {
+                        LOG.debug("MQTT publish OK")
+                    }
+                }
+            }
+
+        msg.reply(MqttHandled.OK)
+    }
+
     private val states = mutableMapOf<String, MutableMap<Int, State>>()
 
     data class State(val type: String, val payload: String, val name: String, val place: String)
@@ -110,9 +154,11 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 publish(item, data.getTempSet().toString(), "set")
                 publish(item, data.getTempMeasured().toString(), "measured")
             }
+
             is SdOutputAudio -> {
                 publish(item, data.asInt().toString(), "event", false)
             }
+
             is SdOutputAudioGroup -> MqttHandled.OK
         }
     }
@@ -200,16 +246,19 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                         value = pay
                     }
                 }
+
                 MqttType.DIMMER ->
                     SdOutputDimmer(id, "", 0x00, 0x00, -1, placeDummy, false).apply {
                         val pay = convertPayloadDimmer(payload) ?: return
                         value = pay
                     }
+
                 MqttType.THERMOSTAT ->
                     SdOutputThermostat(id, "", 0x00, -1, placeDummy, false).apply {
                         val pay = convertThermostatPayload(payload) ?: return
                         setTemp(pay)
                     }
+
                 MqttType.EVENT -> {
                     LOG.warn("Event can't be translated to Qbus")
                     return
@@ -262,6 +311,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         private val PATTERN_AIRQUALITY = Pattern.compile("^/airquality/([^/]+)/sensor/([^/]+)$")
         val ADDRESS = "address_mqtt_verticle"
         val ADDRESS_SENSOR = "address_mqtt_sensor"
+        val ADDRESS_INFO = "address_mqtt_info"
         private val OBJECT_MAPPER = ObjectMapper()
     }
 

@@ -18,6 +18,7 @@ import java.util.*
 import jakarta.annotation.PostConstruct
 import jakarta.annotation.PreDestroy
 import jakarta.enterprise.context.ApplicationScoped
+import org.muizenhol.qbus.sddata.SdDataStruct
 
 @Startup
 @ApplicationScoped
@@ -102,6 +103,7 @@ class ControllerHandler {
             LocalOnlyCodec.register(vertx, StatusRequest::class.java)
             LocalOnlyCodec.register(vertx, MqttHandled::class.java)
             LocalOnlyCodec.register(vertx, MqttSensorItem::class.java)
+            LocalOnlyCodec.register(vertx, SdDataStruct::class.java)
         }
 
         fun unregisterVertxCodecs(vertx: Vertx) {
@@ -109,6 +111,7 @@ class ControllerHandler {
             LocalOnlyCodec.unregister(vertx, StatusRequest::class.java)
             LocalOnlyCodec.unregister(vertx, MqttHandled::class.java)
             LocalOnlyCodec.unregister(vertx, MqttSensorItem::class.java)
+            LocalOnlyCodec.unregister(vertx, SdDataStruct::class.java)
         }
     }
 }
