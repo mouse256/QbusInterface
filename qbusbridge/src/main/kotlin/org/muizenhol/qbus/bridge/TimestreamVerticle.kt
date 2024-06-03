@@ -21,6 +21,7 @@ import software.amazon.awssdk.services.timestreamwrite.model.*
 import java.lang.invoke.MethodHandles
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.Callable
 import java.util.function.Consumer
 
 
@@ -41,7 +42,7 @@ class TimestreamVerticle(val environment: Environment, val accessKey: String?, v
         }
         dbName = "$DATABASE_NAME-${environment.name.lowercase()}"
         tableName = "$TABLE_NAME-${environment.name.lowercase()}"
-        vertx.executeBlocking({
+        vertx.executeBlocking(Callable<Void>{
             timestreamWriteClient = buildWriteClient()
             val tName = timestreamWriteClient
                 .describeTable(
@@ -56,7 +57,7 @@ class TimestreamVerticle(val environment: Environment, val accessKey: String?, v
 
             consumer = vertx.eventBus().localConsumer(MqttVerticle.ADDRESS, this::handle)
             consumerSensor = vertx.eventBus().localConsumer(MqttVerticle.ADDRESS_SENSOR, this::handle2)
-            it.complete()
+            null
         }, startPromise::handle)
     }
 

@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") version "1.8.20" apply false
-    kotlin("plugin.allopen") version "1.8.20" apply(false)
+    kotlin("jvm") version "1.9.24" apply false
+    kotlin("plugin.allopen") version "1.9.24" apply(false)
     base
 }
 
