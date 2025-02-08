@@ -1,6 +1,7 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-  //  java
-    kotlin("jvm")
+    alias(libs.plugins.kotlin.jvm)
 }
 
 group = "org.example"
@@ -28,16 +29,13 @@ tasks.withType<Test> {
 }
 
 java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
-
-tasks {
-    compileKotlin {
-        kotlinOptions.jvmTarget = "17"
-    }
-    compileTestKotlin {
-        kotlinOptions.jvmTarget = "17"
+kotlin {
+    target {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_21
+        }
     }
 }

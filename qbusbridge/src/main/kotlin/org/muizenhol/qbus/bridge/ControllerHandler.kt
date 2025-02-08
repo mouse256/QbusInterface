@@ -52,15 +52,6 @@ class ControllerHandler {
 
         registerVertxCodecs(vertx)
 
-        val influxVerticle = InfluxVerticle(influxToken, influxUrl)
-        vertx.deployVerticle(influxVerticle, DeploymentOptions().setWorker(true))
-
-        val timestreamVerticle = TimestreamVerticle(
-            environment,
-            prop.getProperty("aws.accessId"), prop.getProperty("aws.accessSecret")
-        )
-        vertx.deployVerticle(timestreamVerticle, DeploymentOptions().setWorker(true))
-
         val mqttVerticle = MqttVerticle(mqttHost, mqttPort)
         vertx.deployVerticle(mqttVerticle)
 

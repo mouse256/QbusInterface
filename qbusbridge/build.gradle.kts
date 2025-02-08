@@ -1,30 +1,25 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    kotlin("jvm")
-    kotlin("plugin.allopen")
-    id("io.quarkus")
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.allopen)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.quarkus)
 }
 
-val quarkusPlatformGroupId: String by project
-val quarkusPlatformArtifactId: String by project
-val quarkusPlatformVersion: String by project
 
 dependencies {
-    implementation(enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"))
+    implementation(enforcedPlatform(libs.quarkus.bom))
     implementation("io.quarkus:quarkus-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.2")
+    //implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
+    //implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.2")
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
-    implementation("com.influxdb:influxdb-client-java:6.8.0")
-
-    implementation(platform("software.amazon.awssdk:bom:2.20.44"))
-    implementation("software.amazon.awssdk:timestreamwrite")
-    implementation("software.amazon.awssdk:apache-client")
 
     testImplementation("org.hamcrest:hamcrest:2.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")
@@ -33,7 +28,6 @@ dependencies {
 
     //Java SDK uses apache-commons-logging. Route over slf4j
     runtimeOnly("org.slf4j:jcl-over-slf4j:2.0.9")
-    runtimeOnly("software.amazon.awssdk:sso")
 
 }
 
@@ -41,9 +35,8 @@ group = "org.acme"
 version = "1.0.0-SNAPSHOT"
 
 java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 allOpen {
@@ -52,9 +45,12 @@ allOpen {
     annotation("io.quarkus.test.junit.QuarkusTest")
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions.jvmTarget = JavaVersion.VERSION_17.toString()
-    kotlinOptions.javaParameters = true
+kotlin {
+    target {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_21
+        }
+    }
 }
 tasks {
     test {

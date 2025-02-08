@@ -1,0 +1,19 @@
+[versions]
+kotlin = "2.1.0"
+# 3.15 is LTS version of quarkus. So it's ignored by dependabot from auto-updating
+quarkus = "3.15.3"
+kotlin-logging-jvm = "7.0.3"
+kotest = "5.9.1"
+mockk = "3.0.0"
+
+[plugins]
+quarkus = { id = "io.quarkus", version.ref = "quarkus" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref="kotlin" }
+kotlin-allopen = { id = "org.jetbrains.kotlin.plugin.allopen", version.ref="kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref="kotlin" }
+
+[libraries]
+quarkus-bom = { group = "io.quarkus", name="quarkus-bom", version.ref = "quarkus" }
+kotlin-logging-jvm = { group = "io.github.oshai", name="kotlin-logging-jvm", version.ref="kotlin-logging-jvm" }
+kotest-assertions-core = { group = "io.kotest", name="kotest-assertions-core", version.ref="kotest" }
+mockk = { group = "io.quarkiverse.mockk", name="quarkus-junit5-mockk", version.ref="mockk" }
