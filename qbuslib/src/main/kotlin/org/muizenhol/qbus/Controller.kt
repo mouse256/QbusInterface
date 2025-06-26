@@ -10,10 +10,10 @@ import org.muizenhol.qbus.exception.InvalidSerialException
 import org.muizenhol.qbus.exception.LoginException
 import org.muizenhol.qbus.exception.QbusException
 import org.muizenhol.qbus.sddata.SdDataParser
-import org.muizenhol.qbus.sddata.SdDataStruct
 import org.muizenhol.qbus.sddata.SdOutput
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
+import java.net.SocketException
 import java.time.Duration
 
 class Controller(
@@ -68,6 +68,7 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is PasswordVerify -> {
                     if (state == State.LOGIN) {
                         if (event.loginOk) {
@@ -82,6 +83,7 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is ControllerOptions -> {
                     if (state == State.WAIT_FOR_CONTROLLER_OPTIONS) {
                         updateState(State.WAIT_FOR_FAT_DATA)
@@ -90,6 +92,7 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is FatData -> {
                     if (state == State.WAIT_FOR_FAT_DATA) {
                         updateState(State.DOWNLOAD_SD_DATA_HEADER)
@@ -98,6 +101,7 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is SDData.SDDataHeader -> {
                     if (state == State.DOWNLOAD_SD_DATA_HEADER) {
                         downloader = Downloader(event)
@@ -107,6 +111,7 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is SDData.SDDataBlock -> {
                     if (state == State.DOWNLOAD_SD_DATA) {
                         downloader?.addBlock(event)
@@ -114,6 +119,7 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is AddressStatus -> {
                     if (state == State.FETCH_STATE) {
                         stateFetcher!!.add(event)
@@ -123,6 +129,7 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is Event -> {
                     if (state == State.READY) {
                         dataHandler!!.update(event)
@@ -130,9 +137,11 @@ class Controller(
                         LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                     }
                 }
+
                 is Relogin -> {
                     restart()
                 }
+
                 else -> {
                     LOG.warn("Don't know what to do with event {} in state {}", event.javaClass, state)
                 }
@@ -228,23 +237,33 @@ class Controller(
      * If the state gets accepted, the Qbus controller will publish an event confirming the actual state.
      */
     fun requestNewQbusState(serial: String, output: SdOutput) {
-        dataHandler?.let { dh ->
-            if (dh.data.serialNumber != serial) {
-                LOG.debug("Data for wrong serial")
-                return
+        try {
+            dataHandler?.let { dh ->
+                if (dh.data.serialNumber != serial) {
+                    LOG.debug("Data for wrong serial")
+                    return
+                }
+                val outOrig = dh.getOutput(output.id)
+                if (outOrig != null) {
+                    //Lookup the original output and update the value
+                    //This is needed because the `output` value we get as parameter does not have all the required fields set
+                    //(like address and subaddress)
+                    outOrig.update(output)
+                    LOG.info(
+                        "sending event to Qbus: {} ({}: {}) -> {}",
+                        outOrig.typeName,
+                        outOrig.id,
+                        outOrig.name,
+                        outOrig.printValue()
+                    )
+                    conn.write(outOrig.getAddressStatus())
+                } else {
+                    LOG.warn("Can't find output with id {} to update", output.id)
+                }
             }
-            val outOrig = dh.getOutput(output.id)
-            if (outOrig != null) {
-                //Lookup the original output and update the value
-                //This is needed because the `output` value we get as parameter does not have all the required fields set
-                //(like address and subaddress)
-                outOrig.update(output)
-                LOG.info("sending event to Qbus: {} ({}: {}) -> {}", outOrig.typeName, outOrig.id, outOrig.name, outOrig.printValue())
-                conn.write(outOrig.getAddressStatus())
-            }
-            else {
-                LOG.warn("Can't find output with id {} to update", output.id)
-            }
+        } catch (e: SocketException) {
+            LOG.warn("socket exception, restarting connection", e)
+            restart()
         }
 
     }
