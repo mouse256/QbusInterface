@@ -9,6 +9,7 @@ import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
+import org.muizenhol.qbus.bridge.homeassistant.Discovery
 import org.muizenhol.qbus.bridge.type.*
 import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
@@ -100,14 +101,6 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             return
         }
         val item = msg.body()
-//        val formatted = item.outputs.values.map { x -> x.typeName}
-//            .distinct()
-//            .associateWith { t ->
-//            item.outputs.values
-//                .filter { i -> i.typeName == t }
-//                .map { i -> Info(i.id, i.name) }
-//                .toList()
-//        }
 
         item.outputs.values.map { x -> MqttType.fromQbus(x) }
             .distinct().forEach { type ->
@@ -131,7 +124,48 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 }
             }
 
+        makeHomeAssistantDiscovery(item)
+
         msg.reply(MqttHandled.OK)
+    }
+
+    private fun makeHomeAssistantDiscovery(data: SdDataStruct) {
+        val uuid = "12345"
+        val devices = mapOf("x" to Discovery.Switch(
+            "name",
+            "uniquyId",
+            "/command/topic",
+            "/state/topic",
+            "tset"
+        ))
+        val discovery = Discovery(
+            Discovery.Device(
+                uuid,
+                "mouse256",
+                "qbus",
+                "qbus-mqtt"
+            ),
+            Discovery.Origin(
+                "qbus-mqtt"
+            ),
+            "test/topic",
+            devices
+        )
+
+        mqttClient.publish(
+            "qbus/discovery",
+            Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery)),
+            MqttQoS.AT_LEAST_ONCE,
+            false,
+            true
+        ) { ar ->
+            if (ar.failed()) {
+                LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
+                restart()
+            } else {
+                LOG.debug("MQTT publish OK")
+            }
+        }
     }
 
     private val states = mutableMapOf<String, MutableMap<Int, State>>()

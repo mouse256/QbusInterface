@@ -61,6 +61,7 @@ class MqttVerticleTest() {
         LocalOnlyCodec.register(vertx, MqttItemWrapper::class.java)
         LocalOnlyCodec.register(vertx, StatusRequest::class.java)
         LocalOnlyCodec.register(vertx, MqttHandled::class.java)
+        LocalOnlyCodec.register(vertx, SdDataStruct::class.java)
         mqttServer = StubbedMqttServer()
         mqttServer?.setupMqttServer(vertx, vertxContext) { port ->
             this.port = port
@@ -136,14 +137,16 @@ class MqttVerticleTest() {
     }
 
     private fun mkSwitch(serial: String, id: Int, payload: Byte, readOnly: Boolean = false): MqttItemWrapper {
-        return MqttItemWrapper(serial,
+        return MqttItemWrapper(
+            serial,
             SdOutputOnOff(id, "", 0x00, 0x00, -1, place, readOnly).apply {
                 value = payload
             })
     }
 
     private fun mkDimmer(serial: String, id: Int, payload: Byte): MqttItemWrapper {
-        return MqttItemWrapper(serial,
+        return MqttItemWrapper(
+            serial,
             SdOutputDimmer(id, "", 0x00, 0x00, -1, place, false).apply {
                 value = payload
             })
@@ -285,6 +288,35 @@ class MqttVerticleTest() {
                 "qbus/12345/sensor/switch/1/command",
                 Buffer.buffer("55"), MqttQoS.AT_LEAST_ONCE, false, false
             )
+        }
+    }
+
+    private fun sendInfo(vertx: Vertx, vertxContext: VertxTestContext, item: SdDataStruct, expected: MqttHandled) {
+        val checkpoint = vertxContext.checkpoint()
+        vertx.eventBus().request(MqttVerticle.ADDRESS_INFO, item) { ar: AsyncResult<Message<MqttHandled>> ->
+            if (ar.failed()) {
+                vertxContext.failNow(ar.cause())
+            } else {
+                val res = ar.result().body()
+                if (res != expected) {
+                    vertxContext.failNow(IllegalStateException("Not expected result: ${res}"))
+                } else {
+                    checkpoint.flag()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testInfo(vertx: Vertx, vertxContext: VertxTestContext) {
+        start(vertx, vertxContext) {
+            expectMqtt(vertxContext, "qbus/12345/sensor/switch/1/state", "0")
+            val data = SdDataStruct(
+                "dummyVersion", "dummySerial",
+                mapOf(1 to SdDataStruct.Place(11, "dummyPlace")),
+                mapOf(1 to SdOutputOnOff(123, "", 0x00, 0x00, -1, place, false))
+            )
+            sendInfo(vertx, vertxContext, data, MqttHandled.OK)
         }
     }
 
