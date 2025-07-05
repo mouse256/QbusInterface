@@ -71,8 +71,9 @@ class QbusVerticle private constructor() : AbstractVerticle() {
         if (dataHandler == null) {
             LOG.debug("Qbus not yet initialized, ignoring request")
         } else {
-            LOG.info("Publish current state")
+            LOG.info("Publish current state 1")
             vertx.eventBus().publish(MqttVerticle.ADDRESS_INFO, dataHandler!!.data)
+            LOG.info("Publish current state 2")
             vertx.executeBlocking(Callable {
                     dataHandler!!.data.outputs.values.forEach { out ->
                         Thread.sleep(20) //add a small delay to avoid overloading the mqtt bus

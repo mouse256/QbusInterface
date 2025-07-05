@@ -96,14 +96,14 @@ class MqttVerticleTest() {
         }
     }
 
-    fun expectMqtt(vertxContext: VertxTestContext, topic: String, payload: String) {
+    fun expectMqtt(vertxContext: VertxTestContext, topic: String, payload: String?) {
         val checkpoint = vertxContext.checkpoint()
         mqttClient!!.publishHandler { msg ->
             val value = msg.payload().toString(StandardCharsets.UTF_8)
             LOG.info("Got on {}: \"{}\"", msg.topicName(), value)
             if (msg.topicName().equals(topic)) {
                 LOG.info("topic OK")
-                if (value.equals(payload)) {
+                if (payload == null || value.equals(payload)) {
                     checkpoint.flag()
                 } else {
                     LOG.debug("Not matched: \"{}\" != \"{}\"", value, payload)
@@ -308,13 +308,14 @@ class MqttVerticleTest() {
     }
 
     @Test
-    fun testInfo(vertx: Vertx, vertxContext: VertxTestContext) {
+    fun testHomeAssitantDiscovery(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/sensor/switch/1/state", "0")
+            expectMqtt(vertxContext, "homeassistant/device/qbus-mqtt/device1/config", null)
             val data = SdDataStruct(
                 "dummyVersion", "dummySerial",
                 mapOf(1 to SdDataStruct.Place(11, "dummyPlace")),
-                mapOf(1 to SdOutputOnOff(123, "", 0x00, 0x00, -1, place, false))
+                mapOf(1 to SdOutputOnOff(123, "device1", 0x01, 0x00, -1, place, false)
+                )
             )
             sendInfo(vertx, vertxContext, data, MqttHandled.OK)
         }

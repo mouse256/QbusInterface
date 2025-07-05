@@ -42,7 +42,7 @@ enum class MqttType(val mqttName: String) {
         }
 
         fun fromMqtt(type: String): MqttType? {
-            return values()
+            return entries
                 .iterator()
                 .asSequence()
                 .find { x -> x.mqttName == type }

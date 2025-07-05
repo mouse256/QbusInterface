@@ -9,7 +9,10 @@ import io.vertx.core.eventbus.MessageConsumer
 import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
-import org.muizenhol.qbus.bridge.homeassistant.Discovery
+import org.muizenhol.homeassistant.discovery.Discovery
+import org.muizenhol.homeassistant.discovery.component.Component
+import org.muizenhol.homeassistant.discovery.component.Light
+import org.muizenhol.homeassistant.discovery.component.Switch
 import org.muizenhol.qbus.bridge.type.*
 import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
@@ -100,6 +103,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             LOG.warn("Got info msg but MQTT is not yet started")
             return
         }
+        LOG.info("Sending info on MQTT")
         val item = msg.body()
 
         item.outputs.values.map { x -> MqttType.fromQbus(x) }
@@ -130,42 +134,78 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     }
 
     private fun makeHomeAssistantDiscovery(data: SdDataStruct) {
-        val uuid = "12345"
-        val devices = mapOf("x" to Discovery.Switch(
-            "name",
-            "uniquyId",
-            "/command/topic",
-            "/state/topic",
-            "tset"
-        ))
-        val discovery = Discovery(
-            Discovery.Device(
-                uuid,
-                "mouse256",
-                "qbus",
-                "qbus-mqtt"
-            ),
-            Discovery.Origin(
-                "qbus-mqtt"
-            ),
-            "test/topic",
-            devices
-        )
+        LOG.info("Sending homassistant discovery")
+        data.outputs.forEach { (x, output) ->
+            val uuid = "qbus-${data.serialNumber}-${output.id}"
+            val type = MqttType.fromQbus(output)
+            val topicPrefix = "qbus/${data.serialNumber}/sensor/${type.mqttName}/${output.id}"
+            val stateTopic = "${topicPrefix}/state"
+            val commandTopic = "${topicPrefix}/command"
+            val device: Component = when (output) {
+                is SdOutputOnOff -> Switch(
+                    output.name,
+                    uuid,
+                    commandTopic,
+                    stateTopic,
+                    "255",
+                    "0"
+                )
 
-        mqttClient.publish(
-            "qbus/discovery",
-            Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery)),
-            MqttQoS.AT_LEAST_ONCE,
-            false,
-            true
-        ) { ar ->
-            if (ar.failed()) {
-                LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
-                restart()
-            } else {
-                LOG.debug("MQTT publish OK")
+                is SdOutputDimmer -> Light.Builder()
+                    .withName(output.name)
+                    .withUniqueId(uuid)
+                    .withCommandTopic(commandTopic)
+                    .withStateTopic("${topicPrefix}/actualState")
+                    .withPayloadOn("ON")
+                    .withPayloadOff("OFF")
+                    .withBrightnessScale(255)
+                    .withBrightnessStateTopic(stateTopic)
+                    .withBrightnessCommandTopic(commandTopic)
+                    .withOnCommandType("brightness")
+                    .build()
+
+                else -> {
+                    LOG.warn("Ignoring {} in homeAssitant discovery", output.javaClass)
+                    return
+                }
+            }
+            val devices = mapOf(
+                uuid to device
+            )
+
+
+            val discovery = Discovery(
+                Discovery.Device(
+                    uuid,
+                    "mouse256",
+                    "qbus",
+                    output.name
+                ),
+                Discovery.Origin(
+                    "qbus-mqtt"
+                ),
+                "not/used",
+                devices
+            )
+
+
+            //homeassistant/device/alfen-mqtt-dev/ACE0403792-1/config
+            mqttClient.publish(
+                "homeassistant/device/qbus-mqtt/${uuid}/config",
+                Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery)),
+                MqttQoS.AT_LEAST_ONCE,
+                false,
+                true //retain
+            ) { ar ->
+                if (ar.failed()) {
+                    LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
+                    restart()
+                } else {
+                    LOG.debug("MQTT publish OK")
+                }
             }
         }
+
     }
 
     private val states = mutableMapOf<String, MutableMap<Int, State>>()
@@ -181,7 +221,11 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         val data = item.data
         return when (data) {
             is SdOutputOnOff -> publish(item, data.asInt().toString(), "state")
-            is SdOutputDimmer -> publish(item, data.asInt().toString(), "state")
+            is SdOutputDimmer -> {
+                publish(item, if (data.asInt() > 0) "ON" else "OFF", "actualState")
+                publish(item, data.asInt().toString(), "state")
+            }
+
             is SdOutputTimer -> publish(item, data.asInt().toString(), "state")
             is SdOutputTimer2 -> publish(item, data.asInt().toString(), "state")
             is SdOutputThermostat -> {
@@ -262,7 +306,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     vertx.eventBus().publish(ADDRESS_SENSOR, MqttSensorItem(name, sensor, data))
                 }
             } else {
-                LOG.debug("Topic not matched")
+                LOG.debug("Topic not matched: {}", msg.topicName())
             }
         }
     }
@@ -316,6 +360,12 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     }
 
     private fun convertPayloadDimmer(payload: String): Byte? {
+        if (payload == "ON") {
+            return null //ignore, there will be a brightess command
+        }
+        if (payload == "OFF") {
+            return 0x00.toByte()
+        }
         val p = payload.toDoubleOrNull()
             ?.toInt()
             ?.takeIf { i -> i in 0..255 }
@@ -334,7 +384,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         if (p != null) {
             return p
         } else {
-            LOG.warn("Invalid dimmer payload: {}", payload)
+            LOG.warn("Invalid thermostat payload: {}", payload)
             return null
         }
     }

@@ -20,6 +20,7 @@ dependencies {
     //implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.2")
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
+    implementation("org.muizenhol:homeassistant-discovery:1.0.0")
 
     testImplementation("org.hamcrest:hamcrest:2.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")

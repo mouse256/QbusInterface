@@ -9,4 +9,6 @@ rootProject.name = "qbuscomm"
 include("qbuslib")
 include("qbusbridge")
 
+includeBuild("../homeassistant-discovery")
+
 
