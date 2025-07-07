@@ -10,6 +10,7 @@ import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
 import org.muizenhol.homeassistant.discovery.Discovery
+import org.muizenhol.homeassistant.discovery.component.Climate
 import org.muizenhol.homeassistant.discovery.component.Component
 import org.muizenhol.homeassistant.discovery.component.Light
 import org.muizenhol.homeassistant.discovery.component.Switch
@@ -135,21 +136,21 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
     private fun makeHomeAssistantDiscovery(data: SdDataStruct) {
         LOG.info("Sending homassistant discovery")
-        data.outputs.forEach { (x, output) ->
+        val device: List<Component> = data.outputs.values.flatMap { output ->
             val uuid = "qbus-${data.serialNumber}-${output.id}"
             val type = MqttType.fromQbus(output)
             val topicPrefix = "qbus/${data.serialNumber}/sensor/${type.mqttName}/${output.id}"
             val stateTopic = "${topicPrefix}/state"
             val commandTopic = "${topicPrefix}/command"
-            val device: Component = when (output) {
-                is SdOutputOnOff -> Switch(
-                    output.name,
-                    uuid,
-                    commandTopic,
-                    stateTopic,
-                    "255",
-                    "0"
-                )
+            val device: Component? = when (output) {
+                is SdOutputOnOff -> Switch.Builder()
+                    .withName(output.name)
+                    .withUniqueId(uuid)
+                    .withCommandTopic(commandTopic)
+                    .withStateTopic("${topicPrefix}/state")
+                    .withPayloadOn("255")
+                    .withPayloadOff("0")
+                    .build()
 
                 is SdOutputDimmer -> Light.Builder()
                     .withName(output.name)
@@ -164,47 +165,57 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     .withOnCommandType("brightness")
                     .build()
 
+                is SdOutputThermostat -> Climate.Builder()
+                    .withName(output.name)
+                    .withUniqueId(uuid)
+                    .withTemperatureStateTopic("${topicPrefix}/set")
+                    .withCurrentTemperatureTopic("${topicPrefix}/measured")
+                    .build()
+
                 else -> {
                     LOG.warn("Ignoring {} in homeAssitant discovery", output.javaClass)
-                    return
+                    null
                 }
             }
-            val devices = mapOf(
-                uuid to device
-            )
+            if (device == null) emptyList() else listOf(device)
+        }
+//            val devices = mapOf(
+//                uuid to device
+//            )
+        val devices = device.map { it.uniqueId to it }.toMap()
+
+        val uuid = data.serialNumber
+        val discovery = Discovery(
+            Discovery.Device(
+                uuid,
+                "mouse256",
+                "qbus",
+                "Qbus", //output.name
+            ),
+            Discovery.Origin(
+                "qbus-mqtt"
+            ),
+            "not/used",
+            devices
+        )
 
 
-            val discovery = Discovery(
-                Discovery.Device(
-                    uuid,
-                    "mouse256",
-                    "qbus",
-                    output.name
-                ),
-                Discovery.Origin(
-                    "qbus-mqtt"
-                ),
-                "not/used",
-                devices
-            )
-
-
-            //homeassistant/device/alfen-mqtt-dev/ACE0403792-1/config
-            mqttClient.publish(
-                "homeassistant/device/qbus-mqtt/${uuid}/config",
-                Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery)),
-                MqttQoS.AT_LEAST_ONCE,
-                false,
-                true //retain
-            ) { ar ->
-                if (ar.failed()) {
-                    LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
-                    restart()
-                } else {
-                    LOG.debug("MQTT publish OK")
-                }
+        //homeassistant/device/alfen-mqtt-dev/ACE0403792-1/config
+        mqttClient.publish(
+            "homeassistant/device/qbus-mqtt/${uuid}/config",
+            Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery)),
+            MqttQoS.AT_LEAST_ONCE,
+            false,
+            true //retain
+        ) { ar ->
+            if (ar.failed()) {
+                LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
+                restart()
+            } else {
+                LOG.debug("MQTT publish OK")
             }
         }
+
 
     }
 
