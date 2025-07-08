@@ -168,6 +168,8 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 is SdOutputThermostat -> Climate.Builder()
                     .withName(output.name)
                     .withUniqueId(uuid)
+                    .withTempStep(0.5)
+                    .withModes(SdOutputThermostat.Mode.entries.map { m -> m.name }.toList())
                     .withTemperatureStateTopic("${topicPrefix}/set")
                     .withCurrentTemperatureTopic("${topicPrefix}/measured")
                     .build()
@@ -179,15 +181,12 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             }
             if (device == null) emptyList() else listOf(device)
         }
-//            val devices = mapOf(
-//                uuid to device
-//            )
-        val devices = device.map { it.uniqueId to it }.toMap()
+        val devices = device.associateBy { it.uniqueId }
 
-        val uuid = data.serialNumber
+        val serial = data.serialNumber
         val discovery = Discovery(
             Discovery.Device(
-                uuid,
+                serial,
                 "mouse256",
                 "qbus",
                 "Qbus", //output.name
@@ -202,7 +201,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
         //homeassistant/device/alfen-mqtt-dev/ACE0403792-1/config
         mqttClient.publish(
-            "homeassistant/device/qbus-mqtt/${uuid}/config",
+            "homeassistant/device/qbus-mqtt/${serial}/config",
             Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery)),
             MqttQoS.AT_LEAST_ONCE,
             false,
