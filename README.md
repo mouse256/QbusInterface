@@ -1,3 +1,8 @@
+# About
+
+Interface for communicating with [Qbus](https://qbus.be)
+
+It can be used to integrate with OpenHab or HomeAssistant
 
 # Building
 ```
