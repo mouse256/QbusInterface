@@ -1,10 +1,17 @@
 [versions]
-kotlin = "2.1.0"
-# 3.15 is LTS version of quarkus. So it's ignored by dependabot from auto-updating
-quarkus = "3.15.3"
-kotlin-logging-jvm = "7.0.3"
-kotest = "5.9.1"
-mockk = "3.0.0"
+kotlin = "2.2.21"
+quarkus = "3.28.5"
+kotlin-logging-jvm = "7.0.13"
+kotest = "6.0.4"
+mockk = "3.1.0"
+mockito-kotlin = "6.1.0"
+kotlinx-coroutines-core = "1.10.2"
+slf4j = "2.0.17"
+vertx-junit5 = "5.0.5"
+hamcrest = "3.0"
+log4j-slf4j2-impl = "2.25.2"
+jackson-databind = "2.20.0"
+jackson-module-kotlin = "2.20.0"
 
 [plugins]
 quarkus = { id = "io.quarkus", version.ref = "quarkus" }
@@ -16,4 +23,14 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 quarkus-bom = { group = "io.quarkus", name="quarkus-bom", version.ref = "quarkus" }
 kotlin-logging-jvm = { group = "io.github.oshai", name="kotlin-logging-jvm", version.ref="kotlin-logging-jvm" }
 kotest-assertions-core = { group = "io.kotest", name="kotest-assertions-core", version.ref="kotest" }
+kotest-runner-junit5-jvm = { group = "io.kotest", name="kotest-runner-junit5-jvm", version.ref="kotest" }
 mockk = { group = "io.quarkiverse.mockk", name="quarkus-junit5-mockk", version.ref="mockk" }
+mockito-kotlin = { group = "org.mockito.kotlin", name="mockito-kotlin", version.ref="mockito-kotlin" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name="kotlinx-coroutines-core", version.ref="kotlinx-coroutines-core" }
+slf4j-api = { group = "org.slf4j", name="slf4j-api", version.ref="slf4j" }
+jcl-over-slf4j = { group = "org.slf4j", name="jcl-over-slf4j", version.ref="slf4j" }
+vertx-junit5 = { group = "io.vertx", name="vertx-junit5", version.ref="vertx-junit5" }
+hamcrest = { group = "org.hamcrest", name="hamcrest", version.ref="hamcrest" }
+log4j-slf4j2-impl = { group = "org.apache.logging.log4j", name="log4j-slf4j2-impl", version.ref="log4j-slf4j2-impl" }
+jackson-databind = { group = "com.fasterxml.jackson.core", name="jackson-databind", version.ref="jackson-databind" }
+jackson-module-kotlin = { group = "com.fasterxml.jackson.module", name="jackson-module-kotlin", version.ref="jackson-module-kotlin" }

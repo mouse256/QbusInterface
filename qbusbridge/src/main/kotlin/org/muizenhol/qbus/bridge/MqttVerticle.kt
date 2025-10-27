@@ -135,7 +135,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     }
 
     private fun makeHomeAssistantDiscovery(data: SdDataStruct) {
-        LOG.info("Sending homassistant discovery")
+        LOG.info("Sending homeAssistant discovery")
         val device: List<Component> = data.outputs.values.flatMap { output ->
             val uuid = "qbus-${data.serialNumber}-${output.id}"
             val type = MqttType.fromQbus(output)
@@ -143,7 +143,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             val stateTopic = "${topicPrefix}/state"
             val commandTopic = "${topicPrefix}/command"
             val device: Component? = when (output) {
-                is SdOutputOnOff -> Switch.Builder()
+                is SdOutputOnOff, is SdOutputTimer2, is SdOutputTimer -> Switch.Builder()
                     .withName(output.name)
                     .withUniqueId(uuid)
                     .withCommandTopic(commandTopic)
@@ -214,8 +214,6 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 LOG.debug("MQTT publish OK")
             }
         }
-
-
     }
 
     private val states = mutableMapOf<String, MutableMap<Int, State>>()

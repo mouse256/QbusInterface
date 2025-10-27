@@ -16,19 +16,18 @@ dependencies {
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    //implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
-    //implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.14.2")
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
     implementation("org.muizenhol:homeassistant-discovery:1.0.0")
 
-    testImplementation("org.hamcrest:hamcrest:2.2")
-    testImplementation("org.mockito.kotlin:mockito-kotlin:4.1.0")
-    testImplementation("io.vertx:vertx-junit5:4.4.1")
-    testImplementation("org.apache.logging.log4j:log4j-slf4j2-impl:2.21.1")
+    testImplementation(libs.hamcrest)
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.vertx.junit5)
+    testImplementation(libs.log4j.slf4j2.impl)
 
     //Java SDK uses apache-commons-logging. Route over slf4j
-    runtimeOnly("org.slf4j:jcl-over-slf4j:2.0.9")
+    runtimeOnly(libs.jcl.over.slf4j)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
 }
 

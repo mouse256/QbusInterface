@@ -1,6 +1,8 @@
 package org.muizenhol.qbus
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import org.muizenhol.qbus.datatype.*
 import org.slf4j.LoggerFactory
 import java.io.BufferedInputStream
@@ -48,28 +50,48 @@ class ServerConnectionImpl(socket: Socket, private val listener: ServerConnectio
     private val clientSocket = socket
     private val out: BufferedOutputStream = BufferedOutputStream(clientSocket.getOutputStream())
     private val inStream: BufferedInputStream = BufferedInputStream(clientSocket.getInputStream())
+
+    @Volatile
     private var running = true
     private var bgThread: Job? = null
 
+
     override fun readWelcome() {
         val buf = ByteArray(256)
-        val size = inStream.read(buf)
-        LOG.info("Welcome: {}", String(buf.copyOfRange(0, size), StandardCharsets.UTF_8))
+        for (i in 1..4) {
+            LOG.info("Reading welcome (try {})", i)
+            val size = inStream.read(buf)
+            if (size > 0) {
+                LOG.info("Welcome: {}", String(buf.copyOfRange(0, size), StandardCharsets.UTF_8))
+                return
+            }
+            Thread.sleep(100)
+        }
+        throw IllegalStateException("Can't read welcome message")
     }
 
     override fun startDataReader() {
         LOG.info("Starting datareader")
         bgThread = GlobalScope.launch {
-            try {
-                while (running) {
+            while (running) {
+                try {
                     if (!readData()) {
                         LOG.warn("Stream closed!")
                         running = false
                     }
+                } catch (e: IOException) {
+                    //ioexception. Either graceful close, or close here. We can't recover from this.
+                    if (running) {
+                        //don't care about exception when we got the close call
+                        LOG.warn("IO exception", e)
+                    }
+                    running = false
+                    listener.onConnectionClosed()
+                } catch (e: Exception) {
+                    //other exceptions, try again
+                    LOG.warn("Exception in reading data, retrying", e)
+                    Thread.sleep(1_000)
                 }
-            } catch (e: IOException) {
-                LOG.warn("IO exception", e)
-                listener.onConnectionClosed()
             }
         }
     }
@@ -307,10 +329,23 @@ class ServerConnectionImpl(socket: Socket, private val listener: ServerConnectio
     }
 
     override fun close() {
-        out.close()
-        inStream.close()
-        clientSocket.close()
+        LOG.info("Closing")
         running = false
+        try {
+            out.close()
+        } catch (ex: Exception) {
+            LOG.debug("Error closing: ", ex)
+        }
+        try {
+            inStream.close()
+        } catch (ex: Exception) {
+            LOG.debug("Error closing: ", ex)
+        }
+        try {
+            clientSocket.close()
+        } catch (ex: Exception) {
+            LOG.debug("Error closing: ", ex)
+        }
     }
 
 }

@@ -268,7 +268,7 @@ class Controller(
 
     }
 
-    private fun restart() {
+    fun restart() {
         LOG.info("Restarting login in {}", reconnectTimeout)
         try {
             //try to close again, just in case not all resources were cleaned

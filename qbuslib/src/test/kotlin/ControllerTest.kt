@@ -1,7 +1,7 @@
 import io.kotest.core.Tuple2
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
-import io.kotest.core.test.TestResult
+import io.kotest.engine.test.TestResult
 import kotlinx.coroutines.*
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.MatcherAssert.assertThat
@@ -108,7 +108,7 @@ class ControllerTest : StringSpec() {
     }
 
 
-    override fun afterTest(f: suspend (Tuple2<TestCase, TestResult>) -> Unit) {
+    override suspend fun afterTest(testCase: TestCase, result: TestResult): Unit {
         controller.close()
     }
 
