@@ -43,7 +43,12 @@ class QbusVerticle private constructor() : AbstractVerticle() {
         LOG.info("Starting")
         consumerStatus = vertx.eventBus().localConsumer(ADDRESS_STATUS, this::handleStatusRequest)
         consumer = vertx.eventBus().localConsumer(ADDRESS_UPDATE_QBUS_ITEM, this::handleQbusUpdateItem)
-        controller.start()
+        try {
+            controller.start()
+        } catch (e: Exception) {
+            LOG.warn("Error starting controller, retrying", e)
+            controller.restart()
+        }
     }
 
     override fun stop() {

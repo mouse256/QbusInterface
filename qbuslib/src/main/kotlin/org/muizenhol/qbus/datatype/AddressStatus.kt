@@ -24,7 +24,17 @@ class AddressStatus(
                 throw DataParseException("Invalid AddressStatus message")
             }
             val size = cmdArray[6]
-            val data = cmdArray.copyOfRange(8, 8 + size)
+            val data = if (size == 0xFF.toByte()) { //-1
+                LOG.warn(
+                    "Invalid AddressStatus message: size: {}, array size: {} -- {}",
+                    size,
+                    cmdArray.size,
+                    Common.bytesToHex(cmdArray)
+                )
+                byteArrayOf()
+            } else {
+                cmdArray.copyOfRange(8, 8 + size)
+            }
 
             LOG.debug(
                 "Data: Address: 0x{}0x{}-- {}",

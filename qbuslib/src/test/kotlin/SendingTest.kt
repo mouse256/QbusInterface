@@ -1,7 +1,7 @@
 import io.kotest.core.Tuple2
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
-import io.kotest.core.test.TestResult
+import io.kotest.engine.test.TestResult
 import io.kotest.matchers.shouldBe
 import org.muizenhol.qbus.Common
 import org.muizenhol.qbus.Controller
@@ -40,7 +40,7 @@ class SendingTest : StringSpec() {
         ctrl.dataHandler = DataHandler(SdDataStruct("v1","serial", places, outputs))
     }
 
-    override fun afterTest(f: suspend (Tuple2<TestCase, TestResult>) -> Unit) {
+    override suspend fun afterTest(testCase: TestCase, testResult: TestResult): Unit {
         ctrl.close()
     }
 

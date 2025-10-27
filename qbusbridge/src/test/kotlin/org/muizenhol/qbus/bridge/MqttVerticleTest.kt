@@ -310,7 +310,7 @@ class MqttVerticleTest() {
     @Test
     fun testHomeAssitantDiscovery(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "homeassistant/device/qbus-mqtt/device1/config", null)
+            expectMqtt(vertxContext, "homeassistant/device/qbus-mqtt/dummySerial/config", null)
             val data = SdDataStruct(
                 "dummyVersion", "dummySerial",
                 mapOf(1 to SdDataStruct.Place(11, "dummyPlace")),
