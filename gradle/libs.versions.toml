@@ -9,7 +9,7 @@ kotlinx-coroutines-core = "1.10.2"
 slf4j = "2.0.17"
 vertx-junit5 = "5.0.5"
 hamcrest = "3.0"
-log4j-slf4j2-impl = "2.25.2"
+log4j-slf4j2-impl = "2.25.3"
 jackson-databind = "2.20.1"
 jackson-module-kotlin = "2.20.1"
 
