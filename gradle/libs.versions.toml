@@ -11,7 +11,7 @@ vertx-junit5 = "5.0.6"
 hamcrest = "3.0"
 log4j-slf4j2-impl = "2.25.3"
 jackson-databind = "2.20.1"
-jackson-module-kotlin = "2.20.1"
+jackson-module-kotlin = "2.21.0"
 
 [plugins]
 quarkus = { id = "io.quarkus", version.ref = "quarkus" }
