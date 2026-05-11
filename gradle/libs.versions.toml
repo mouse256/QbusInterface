@@ -1,6 +1,6 @@
 [versions]
 kotlin = "2.3.21"
-quarkus = "3.35.1"
+quarkus = "3.35.2"
 kotlin-logging-jvm = "8.0.02"
 kotest = "6.1.11"
 mockk = "3.1.0"
