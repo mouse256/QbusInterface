@@ -1,5 +1,5 @@
 [versions]
-kotlin = "2.3.21"
+kotlin = "2.4.0"
 quarkus = "3.36.1"
 kotlin-logging-jvm = "8.0.4"
 kotest = "6.1.11"
