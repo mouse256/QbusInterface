@@ -13,6 +13,7 @@ import org.muizenhol.homeassistant.discovery.Discovery
 import org.muizenhol.homeassistant.discovery.component.Climate
 import org.muizenhol.homeassistant.discovery.component.Component
 import org.muizenhol.homeassistant.discovery.component.Light
+import org.muizenhol.homeassistant.discovery.component.Sensor
 import org.muizenhol.homeassistant.discovery.component.Switch
 import org.muizenhol.qbus.bridge.type.*
 import org.muizenhol.qbus.sddata.*
@@ -32,8 +33,10 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     override fun start() {
         LOG.info("Verticle starting")
         val mqttClientOptions = MqttClientOptions()
-            .setMaxInflightQueue(200)
+            .setAutoKeepAlive(true)
+            .setMaxInflightQueue(2000)
         mqttClient = MqttClient.create(vertx, mqttClientOptions)
+
         connectMqtt {
             LOG.info("MQTT ready")
             started = true
@@ -136,76 +139,36 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
     private fun makeHomeAssistantDiscovery(data: SdDataStruct) {
         LOG.info("Sending homeAssistant discovery")
-        val device: List<Component> = data.outputs.values.flatMap { output ->
-            val uuid = "qbus-${data.serialNumber}-${output.id}"
-            val type = MqttType.fromQbus(output)
-            val topicPrefix = "qbus/${data.serialNumber}/sensor/${type.mqttName}/${output.id}"
-            val stateTopic = "${topicPrefix}/state"
-            val commandTopic = "${topicPrefix}/command"
-            val device: Component? = when (output) {
-                is SdOutputOnOff, is SdOutputTimer2, is SdOutputTimer -> Switch.Builder()
-                    .withName(output.name)
-                    .withUniqueId(uuid)
-                    .withCommandTopic(commandTopic)
-                    .withStateTopic("${topicPrefix}/state")
-                    .withPayloadOn("255")
-                    .withPayloadOff("0")
-                    .build()
 
-                is SdOutputDimmer -> Light.Builder()
-                    .withName(output.name)
-                    .withUniqueId(uuid)
-                    .withCommandTopic(commandTopic)
-                    .withStateTopic("${topicPrefix}/actualState")
-                    .withPayloadOn("ON")
-                    .withPayloadOff("OFF")
-                    .withBrightnessScale(255)
-                    .withBrightnessStateTopic(stateTopic)
-                    .withBrightnessCommandTopic(commandTopic)
-                    .withOnCommandType("brightness")
-                    .build()
-
-                is SdOutputThermostat -> Climate.Builder()
-                    .withName(output.name)
-                    .withUniqueId(uuid)
-                    .withTempStep(0.5)
-                    .withModes(SdOutputThermostat.Mode.entries.map { m -> m.name }.toList())
-                    .withTemperatureStateTopic("${topicPrefix}/set")
-                    .withCurrentTemperatureTopic("${topicPrefix}/measured")
-                    .build()
-
-                else -> {
-                    LOG.warn("Ignoring {} in homeAssitant discovery", output.javaClass)
-                    null
-                }
-            }
-            if (device == null) emptyList() else listOf(device)
-        }
-        val devices = device.associateBy { it.uniqueId }
-
-        val serial = data.serialNumber
-        val discovery = Discovery(
+        //data.serialNumber
+        val idQbus = "qbus-${data.serialNumber}"
+        val discovery3 = Discovery(
             Discovery.Device(
-                serial,
+                idQbus,
                 "mouse256",
-                "qbus",
-                "Qbus", //output.name
+                "Qbus controller",
+                "Qbus ${data.serialNumber}",
+                null
             ),
             Discovery.Origin(
-                "qbus-mqtt"
+                "mouse256-qbus"
             ),
             "not/used",
-            devices
+            mapOf(
+                "${idQbus}-version" to Sensor.Builder()
+                    .withName("version")
+                    .withValueTemplate(data.version)
+                    .withEntityCategory(Sensor.Builder.EntityCategory.DIAGNOSTIC)
+                    .withUniqueId("${idQbus}-version")
+                    .build()
+            )
         )
-
-
-        //homeassistant/device/alfen-mqtt-dev/ACE0403792-1/config
         mqttClient.publish(
-            "homeassistant/device/qbus-mqtt/${serial}/config",
-            Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery)),
+            "homeassistant/device/qbus-mqtt-${data.serialNumber}/${idQbus}/config",
+            Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery3)),
             MqttQoS.AT_LEAST_ONCE,
             false,
-            true //retain
+            true //retain TODO change
         ) { ar ->
             if (ar.failed()) {
                 LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
@@ -214,17 +177,107 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 LOG.debug("MQTT publish OK")
             }
         }
+
+
+        data.outputs.values.forEach { output ->
+            val uuid = "qbus-${data.serialNumber}-${output.id}"
+            val type = MqttType.fromQbus(output)
+            val topicPrefix = "qbus/${data.serialNumber}/sensor/${type.mqttName}/${output.id}"
+            val stateTopic = "${topicPrefix}/state"
+            val commandTopic = "${topicPrefix}/command"
+            val deviceWithMeta: ComponentWithMeta? = when (output) {
+                is SdOutputOnOff, is SdOutputTimer2, is SdOutputTimer -> ComponentWithMeta(
+                    Switch.Builder()
+                        .withName(output.name)
+                        .withUniqueId(uuid)
+                        .withCommandTopic(commandTopic)
+                        .withStateTopic("${topicPrefix}/state")
+                        .withPayloadOn("255")
+                        .withPayloadOff("0")
+                        .build(),
+                    "relay"
+                )
+
+                is SdOutputDimmer -> ComponentWithMeta(
+                    Light.Builder()
+                        .withName(output.name)
+                        .withUniqueId(uuid)
+                        .withCommandTopic(commandTopic)
+                        .withStateTopic("${topicPrefix}/actualState")
+                        .withPayloadOn("ON")
+                        .withPayloadOff("OFF")
+                        .withBrightnessScale(255)
+                        .withBrightnessStateTopic(stateTopic)
+                        .withBrightnessCommandTopic(commandTopic)
+                        .withOnCommandType("brightness")
+                        .build(),
+                    "dimmer"
+                )
+
+                is SdOutputThermostat -> ComponentWithMeta(
+                    Climate.Builder()
+                        .withName(output.name)
+                        .withUniqueId(uuid)
+                        .withTempStep(0.5)
+                        .withModes(SdOutputThermostat.Mode.entries.map { m -> m.name }.toList())
+                        .withTemperatureStateTopic("${topicPrefix}/set")
+                        .withCurrentTemperatureTopic("${topicPrefix}/measured")
+                        .build(),
+                    "thermostat"
+                )
+
+                else -> {
+                    LOG.warn("Ignoring {} in homeAssitant discovery", output.javaClass)
+                    null
+                }
+            }
+
+            if (deviceWithMeta != null) {
+                val device = deviceWithMeta.comp
+                val serial = data.serialNumber
+                val id = "${serial}-${device.uniqueId}"
+                val comps = mapOf<String, Component>(device.uniqueId to device)
+                val discovery2 = Discovery(
+                    Discovery.Device(
+                        id,
+                        "Qbus",
+                        "Qbus ${deviceWithMeta.type}",
+                        device.name,
+                        idQbus
+                    ),
+                    Discovery.Origin(
+                        "mouse256-qbus"
+                    ),
+                    "not/used",
+                    comps
+                )
+                LOG.info("Publish discovery for ${id}")
+                mqttClient.publish(
+                    "homeassistant/device/qbus-mqtt-${serial}/${device.uniqueId}/config",
+                    Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery2)),
+                    MqttQoS.AT_LEAST_ONCE,
+                    false,
+                    false //retain TODO change
+                ) { ar ->
+                    if (ar.failed()) {
+                        LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
+                        restart()
+                    } else {
+                        LOG.debug("MQTT publish OK")
+                    }
+                }
+            }
+        }
+
     }
 
     private val states = mutableMapOf<String, MutableMap<Int, State>>()
 
+    data class ComponentWithMeta(val comp: Component, val type: String)
     data class State(val type: String, val payload: String, val name: String, val place: String)
 
     private fun publish(item: MqttItemWrapper): MqttHandled {
-        //TODO: fix
-        /*
-        val map = states.computeIfAbsent(item.serial) { mutableMapOf() }
-        map.put(data.id, State(data.typeName, payload, data.name, data.place.name))*/
+
 
         val data = item.data
         return when (data) {
