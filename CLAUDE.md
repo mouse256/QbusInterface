@@ -80,11 +80,11 @@ The `settings.gradle.kts` uses `includeBuild` to pull in `../homeassistant-disco
 
 ### qbusbridge — MQTT Bridge Layer
 
-Quarkus CDI bean `ControllerHandler` (`@ApplicationScoped @Startup`) creates a Vert.x instance and deploys two verticles:
+Quarkus CDI bean `ControllerHandler` (`@ApplicationScoped @Startup`) injects the Quarkus-managed `Vertx` instance and deploys two verticles:
 
-- **`QbusVerticle`** — wraps `Controller`. On `onControllerReady`, registers a `DataHandler` listener that publishes updates to the Vert.x event bus (`MqttVerticle.ADDRESS`). Listens on the event bus for incoming MQTT commands (`ADDRESS_UPDATE_QBUS_ITEM`) and forwards them to `controller.requestNewQbusState`.
+- **`QbusVerticle`** — wraps `Controller`. `start()` runs `controller.start()` in `vertx.executeBlocking` (it does blocking I/O). On `onControllerReady`, registers a `DataHandler` listener that publishes updates to the Vert.x event bus (`MqttVerticle.ADDRESS`). Listens on the event bus for incoming MQTT commands (`ADDRESS_UPDATE_QBUS_ITEM`) and forwards them to `controller.requestNewQbusState`.
 
-- **`MqttVerticle`** — manages the MQTT connection (Vert.x MQTT client with auto-reconnect). Translates between MQTT topics and Qbus outputs. All outgoing publishes go through an internal publish queue (`publishQueued`/`drainPublishQueue`) that limits in-flight QoS 1 messages to `MAX_INFLIGHT` (5). The `publish()` callback only signals the packet was written to the socket; an in-flight slot is freed on PUBACK via `publishCompletionHandler` (or `publishCompletionExpirationHandler` on timeout). Also subscribes to `/airquality/+/sensor/+` and republishes those readings on the event bus (`ADDRESS_SENSOR`).
+- **`MqttVerticle`** — manages the MQTT connection (Vert.x MQTT client with auto-reconnect). Translates between MQTT topics and Qbus outputs. All outgoing publishes go through an internal publish queue (`publishQueued`/`drainPublishQueue`) that limits in-flight QoS 1 messages to `MAX_INFLIGHT` (5). The `publish()` callback only signals the packet was written to the socket; an in-flight slot is freed on PUBACK via `publishCompletionHandler` (or `publishCompletionExpirationHandler` on timeout). After each output update, `publish()` also updates the `states` map and publishes a retained JSON snapshot to `qbus/{serial}/state`.
 
 The two verticles communicate exclusively via the Vert.x local event bus using `LocalOnlyCodec` (bypasses serialization for in-process messages). All codec types must be registered in `ControllerHandler.registerVertxCodecs`.
 

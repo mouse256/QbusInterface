@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
 }
 
-group = "org.example"
+group = "org.muizenhol"
 version = "1.0-SNAPSHOT"
 
 dependencies {

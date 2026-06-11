@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.regex.Pattern
 
+
 class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle() {
     lateinit var mqttClient: MqttClient
     lateinit var consumer: MessageConsumer<MqttItemWrapper>
@@ -275,60 +276,67 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     data class State(val type: String, val payload: String, val name: String, val place: String)
 
     private fun publish(item: MqttItemWrapper): MqttHandled {
-
-
         val data = item.data
-        return when (data) {
-            is SdOutputOnOff -> publish(item, data.asInt().toString(), "state")
+        val primaryPayload: String? = when (data) {
+            is SdOutputOnOff -> {
+                publishTopic(item, data.asInt().toString(), "state")
+                data.asInt().toString()
+            }
             is SdOutputDimmer -> {
-                publish(item, if (data.asInt() > 0) "ON" else "OFF", "actualState")
-                publish(item, data.asInt().toString(), "state")
+                publishTopic(item, if (data.asInt() > 0) "ON" else "OFF", "actualState")
+                publishTopic(item, data.asInt().toString(), "state")
+                data.asInt().toString()
             }
-
-            is SdOutputTimer -> publish(item, data.asInt().toString(), "state")
-            is SdOutputTimer2 -> publish(item, data.asInt().toString(), "state")
+            is SdOutputTimer -> {
+                publishTopic(item, data.asInt().toString(), "state")
+                data.asInt().toString()
+            }
+            is SdOutputTimer2 -> {
+                publishTopic(item, data.asInt().toString(), "state")
+                data.asInt().toString()
+            }
             is SdOutputThermostat -> {
-                publish(item, data.getTempSet().toString(), "set")
-                publish(item, data.getTempMeasured().toString(), "measured")
+                publishTopic(item, data.getTempSet().toString(), "set")
+                publishTopic(item, data.getTempMeasured().toString(), "measured")
+                data.getTempSet().toString()
             }
-
             is SdOutputAudio -> {
-                publish(item, data.asInt().toString(), "event", false)
+                publishTopic(item, data.asInt().toString(), "event", retain = false)
+                null  // audio events not stored in snapshot
             }
-
-            is SdOutputAudioGroup -> MqttHandled.OK
+            is SdOutputAudioGroup -> null
         }
+
+        if (primaryPayload != null) {
+            val type = MqttType.fromQbus(item.data)
+            states.getOrPut(item.serial) { mutableMapOf() }[item.data.id] =
+                State(type.mqttName, primaryPayload, item.data.name, item.data.place.name)
+            publishQueued(
+                "qbus/" + item.serial + "/state",
+                Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(states)),
+                MqttQoS.AT_LEAST_ONCE,
+                false,
+                true
+            )
+        }
+        return MqttHandled.OK
     }
 
-    private fun publish(item: MqttItemWrapper, payloadS: String, topic: String, retain: Boolean = true): MqttHandled {
+    private fun publishTopic(item: MqttItemWrapper, payloadS: String, topic: String, retain: Boolean = true) {
         val type = MqttType.fromQbus(item.data)
-        val payload = Buffer.buffer(payloadS)
-
         publishQueued(
             "qbus/" + item.serial + "/sensor/" + type.mqttName + "/" + item.data.id + "/${topic}",
-            payload,
+            Buffer.buffer(payloadS),
             MqttQoS.AT_LEAST_ONCE,
             false,
             retain
         )
-        publishQueued(
-            "qbus/" + item.serial + "/state",
-            Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(states)),
-            MqttQoS.AT_LEAST_ONCE,
-            false,
-            true
-        )
-        return MqttHandled.OK
     }
 
     private fun subscribe() {
         mqttClient.publishHandler(this::handleOpenhabEvent)
         mqttClient.subscribe(
             "qbus/+/sensor/+/+/command",
-            MqttQoS.AT_LEAST_ONCE.value()
-        )
-        mqttClient.subscribe(
-            "/airquality/+/sensor/+",
             MqttQoS.AT_LEAST_ONCE.value()
         )
     }
@@ -344,16 +352,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             LOG.debug("Got {} data for {}: {}", type, id, payload)
             toQbus(serial, type, payload, id)
         } else {
-            val matcher2 = PATTERN_AIRQUALITY.matcher(msg.topicName())
-            if (matcher2.matches()) {
-                val name = matcher2.group(1)
-                val sensor = matcher2.group(2)
-                msg.payload().toString(StandardCharsets.UTF_8).toDoubleOrNull()?.let { data ->
-                    vertx.eventBus().publish(ADDRESS_SENSOR, MqttSensorItem(name, sensor, data))
-                }
-            } else {
-                LOG.debug("Topic not matched: {}", msg.topicName())
-            }
+            LOG.debug("Topic not matched: {}", msg.topicName())
         }
     }
 
@@ -470,9 +469,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         private const val MAX_INFLIGHT = 5
         private const val ACK_TIMEOUT_SECONDS = 30
         private val PATTERN_COMMAND = Pattern.compile("qbus/([^/]+)/sensor/([^/]+)/(\\d+)/command")
-        private val PATTERN_AIRQUALITY = Pattern.compile("^/airquality/([^/]+)/sensor/([^/]+)$")
         val ADDRESS = "address_mqtt_verticle"
-        val ADDRESS_SENSOR = "address_mqtt_sensor"
         val ADDRESS_INFO = "address_mqtt_info"
         private val OBJECT_MAPPER = ObjectMapper()
     }

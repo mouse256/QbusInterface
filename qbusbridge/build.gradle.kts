@@ -13,9 +13,9 @@ dependencies {
     implementation("io.quarkus:quarkus-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("io.quarkus:quarkus-arc")
+    implementation("io.quarkus:quarkus-vertx")
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
     implementation("org.muizenhol:homeassistant-discovery:1.0.0")
@@ -31,7 +31,7 @@ dependencies {
 
 }
 
-group = "org.acme"
+group = "org.muizenhol"
 version = "1.0.0-SNAPSHOT"
 
 java {

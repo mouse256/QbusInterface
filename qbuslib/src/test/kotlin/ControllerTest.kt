@@ -252,18 +252,50 @@ class ControllerTest : StringSpec() {
             LOG.info("OK")
             val waiting = CompletableDeferred<Unit>()
             var readyCount = 0
-            controller.use {
-                sunny {
-                    readyCount++
-                    if (readyCount == 1) {
-                        sendEvent(Relogin())
-                    }
-                    else {
-                        waiting.complete(Unit)
-                    }
+            sunny {
+                readyCount++
+                if (readyCount == 1) {
+                    sendEvent(Relogin())
+                } else {
+                    controller.close()
+                    waiting.complete(Unit)
                 }
             }
             waiting.await()
+        }
+        "CloseWhilePendingReconnectDoesNotReconnect" {
+            var connectionCount = 0
+            val testController = Controller(serialDefault, "username", "password", "localhost",
+                { _ -> },
+                connectionCreator = { _, _, _ ->
+                    connectionCount++
+                    serverConnection
+                },
+                reconnectTimeout = java.time.Duration.ofSeconds(10),
+                sleepOnStart = java.time.Duration.ZERO
+            )
+            assertThat(connectionCount, equalTo(1))  // called once at construction
+            testController.onConnectionClosed()       // schedules reconnect after 10s
+            testController.close()                    // must cancel the pending reconnect
+            delay(300)
+            assertThat(connectionCount, equalTo(1))  // still 1: reconnect was cancelled
+        }
+        "ReconnectOnConnectionClosed" {
+            var readyCount = 0
+            val waiting = CompletableDeferred<Unit>()
+            stateHandler = { state ->
+                if (state == Controller.State.READY) {
+                    readyCount++
+                    when (readyCount) {
+                        1 -> controller.onConnectionClosed()
+                        2 -> waiting.complete(Unit)
+                        else -> waiting.completeExceptionally(IllegalStateException("Too many READY events: $readyCount"))
+                    }
+                }
+            }
+            controller.start()
+            waiting.await()
+            assertThat(readyCount, equalTo(2))
         }
     }
 

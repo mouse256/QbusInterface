@@ -40,7 +40,7 @@ class SendingTest : StringSpec() {
         ctrl.dataHandler = DataHandler(SdDataStruct("v1","serial", places, outputs))
     }
 
-    override suspend fun afterTest(testCase: TestCase, testResult: TestResult): Unit {
+    override suspend fun afterTest(testCase: TestCase, result: TestResult): Unit {
         ctrl.close()
     }
 

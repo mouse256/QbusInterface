@@ -1,7 +1,10 @@
 package org.muizenhol.qbus
 
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.muizenhol.qbus.datatype.*
 import org.slf4j.LoggerFactory
@@ -53,6 +56,7 @@ class ServerConnectionImpl(socket: Socket, private val listener: ServerConnectio
 
     @Volatile
     private var running = true
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var bgThread: Job? = null
 
 
@@ -72,7 +76,7 @@ class ServerConnectionImpl(socket: Socket, private val listener: ServerConnectio
 
     override fun startDataReader() {
         LOG.info("Starting datareader")
-        bgThread = GlobalScope.launch {
+        bgThread = scope.launch {
             while (running) {
                 try {
                     if (!readData()) {
@@ -80,13 +84,14 @@ class ServerConnectionImpl(socket: Socket, private val listener: ServerConnectio
                         running = false
                     }
                 } catch (e: IOException) {
-                    //ioexception. Either graceful close, or close here. We can't recover from this.
+                    // Either graceful close or network error. Only notify listener on unexpected close.
                     if (running) {
-                        //don't care about exception when we got the close call
                         LOG.warn("IO exception", e)
+                        running = false
+                        listener.onConnectionClosed()
+                    } else {
+                        running = false
                     }
-                    running = false
-                    listener.onConnectionClosed()
                 } catch (e: Exception) {
                     //other exceptions, try again
                     LOG.warn("Exception in reading data, retrying", e)
@@ -346,6 +351,9 @@ class ServerConnectionImpl(socket: Socket, private val listener: ServerConnectio
         } catch (ex: Exception) {
             LOG.debug("Error closing: ", ex)
         }
+        // Cancel the scope after streams are closed so any IOException in the reader
+        // is already handled before cancellation, preventing a spurious onConnectionClosed.
+        scope.cancel()
     }
 
 }

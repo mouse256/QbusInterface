@@ -2,6 +2,7 @@ package org.muizenhol.qbus.bridge
 
 import io.vertx.core.Promise
 import io.vertx.core.Vertx
+import io.vertx.core.eventbus.Message
 import io.vertx.junit5.Timeout
 import io.vertx.junit5.VertxExtension
 import io.vertx.junit5.VertxTestContext
@@ -144,6 +145,42 @@ class QbusVerticleTest() {
             val out1 = SdOutputDimmer(2, "out2", 0x51, 0x02, 123, mockPlace, false)
             out1.value = 0x55.toByte()
             outputs.put(1, out1)
+
+            promComplete()
+        }
+    }
+
+    @Test
+    fun testSendAllStates(vertx: Vertx, vertxContext: VertxTestContext) {
+        val infoCheckpoint = vertxContext.checkpoint()
+        val out1Checkpoint = vertxContext.checkpoint()
+        val out2Checkpoint = vertxContext.checkpoint()
+
+        start(vertx, vertxContext) {
+            vertx.eventBus().localConsumer<SdDataStruct>(MqttVerticle.ADDRESS_INFO) { msg: Message<SdDataStruct> ->
+                try {
+                    assertThat(msg.body().serialNumber, equalTo("serial"))
+                    infoCheckpoint.flag()
+                } catch (t: Throwable) { vertxContext.failNow(t) }
+            }
+
+            val received = mutableSetOf<Int>()
+            vertx.eventBus().localConsumer<MqttItemWrapper>(MqttVerticle.ADDRESS) { msg: Message<MqttItemWrapper> ->
+                try {
+                    val id = msg.body().data.id
+                    if (received.add(id)) {
+                        when (id) {
+                            1 -> out1Checkpoint.flag()
+                            2 -> out2Checkpoint.flag()
+                        }
+                    }
+                } catch (t: Throwable) { vertxContext.failNow(t) }
+            }
+
+            val out1 = SdOutputOnOff(1, "light1", 0x51, 0x02, 123, mockPlace, false).apply { value = 0xFF.toByte() }
+            val out2 = SdOutputDimmer(2, "dimmer1", 0x52, 0x02, 124, mockPlace, false).apply { value = 0x80.toByte() }
+            outputs[1] = out1
+            outputs[2] = out2
 
             promComplete()
         }
