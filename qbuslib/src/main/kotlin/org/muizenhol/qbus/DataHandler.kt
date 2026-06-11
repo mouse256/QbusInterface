@@ -1,6 +1,7 @@
 package org.muizenhol.qbus
 
 import org.muizenhol.qbus.datatype.AddressStatus
+import org.muizenhol.qbus.datatype.DataParseException
 import org.muizenhol.qbus.datatype.Event
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.muizenhol.qbus.sddata.SdOutput
@@ -44,7 +45,7 @@ class DataHandler(val data: SdDataStruct) {
 
     fun update(event: AddressStatus) {
         if (event.subAddress != 0xFF.toByte()) {
-            throw IllegalStateException("Can't handle this subaddress")
+            throw DataParseException("Can't handle this subaddress")
         }
         update(event.address, event.data, false)
     }

@@ -10,11 +10,7 @@ import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
 import org.muizenhol.homeassistant.discovery.Discovery
-import org.muizenhol.homeassistant.discovery.component.Climate
-import org.muizenhol.homeassistant.discovery.component.Component
-import org.muizenhol.homeassistant.discovery.component.Light
-import org.muizenhol.homeassistant.discovery.component.Sensor
-import org.muizenhol.homeassistant.discovery.component.Switch
+import org.muizenhol.homeassistant.discovery.component.*
 import org.muizenhol.qbus.bridge.type.*
 import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
@@ -29,13 +25,33 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     lateinit var consumer: MessageConsumer<MqttItemWrapper>
     lateinit var consumerInfo: MessageConsumer<SdDataStruct>
     var started = false
+    private val publishQueue = ArrayDeque<PublishItem>()
+    private var inflightCount = 0
 
     override fun start() {
         LOG.info("Verticle starting")
+        inflightCount = 0
+        publishQueue.clear()
         val mqttClientOptions = MqttClientOptions()
             .setAutoKeepAlive(true)
-            .setMaxInflightQueue(2000)
+            .setAckTimeout(ACK_TIMEOUT_SECONDS)
         mqttClient = MqttClient.create(vertx, mqttClientOptions)
+
+        // The handler passed to publish() only signals that the packet was written to the
+        // socket. The inflight slot is freed on PUBACK (or timeout), signalled here.
+        mqttClient.publishCompletionHandler {
+            if (started) {
+                inflightCount--
+                drainPublishQueue()
+            }
+        }
+        mqttClient.publishCompletionExpirationHandler { packetId ->
+            LOG.warn("No PUBACK received for packet {} within {}s", packetId, ACK_TIMEOUT_SECONDS)
+            if (started) {
+                inflightCount--
+                drainPublishQueue()
+            }
+        }
 
         connectMqtt {
             LOG.info("MQTT ready")
@@ -59,7 +75,10 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
     override fun stop() {
         LOG.info("Stopping")
         started = false
+        publishQueue.clear()
+        inflightCount = 0
         consumer.unregister()
+        consumerInfo.unregister()
         if (mqttClient.isConnected) {
             mqttClient.disconnect()
         }
@@ -116,20 +135,13 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     .filter { i -> MqttType.fromQbus(i) == type }
                     .map { i -> Info(i.id, i.name) }
                     .toList()
-                mqttClient.publish(
+                publishQueued(
                     "qbus/" + item.serialNumber + "/info/outputs/" + type.mqttName,
                     Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(items)),
                     MqttQoS.AT_LEAST_ONCE,
                     false,
                     true
-                ) { ar ->
-                    if (ar.failed()) {
-                        LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
-                        restart()
-                    } else {
-                        LOG.debug("MQTT publish OK")
-                    }
-                }
+                )
             }
 
         makeHomeAssistantDiscovery(item)
@@ -163,20 +175,13 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     .build()
             )
         )
-        mqttClient.publish(
+        publishQueued(
             "homeassistant/device/qbus-mqtt-${data.serialNumber}/${idQbus}/config",
             Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery3)),
             MqttQoS.AT_LEAST_ONCE,
             false,
-            true //retain TODO change
-        ) { ar ->
-            if (ar.failed()) {
-                LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
-                restart()
-            } else {
-                LOG.debug("MQTT publish OK")
-            }
-        }
+            true
+        )
 
 
         data.outputs.values.forEach { output ->
@@ -252,20 +257,13 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     comps
                 )
                 LOG.info("Publish discovery for ${id}")
-                mqttClient.publish(
+                publishQueued(
                     "homeassistant/device/qbus-mqtt-${serial}/${device.uniqueId}/config",
                     Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery2)),
                     MqttQoS.AT_LEAST_ONCE,
                     false,
-                    false //retain TODO change
-                ) { ar ->
-                    if (ar.failed()) {
-                        LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
-                        restart()
-                    } else {
-                        LOG.debug("MQTT publish OK")
-                    }
-                }
+                    true
+                )
             }
         }
 
@@ -306,33 +304,20 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         val type = MqttType.fromQbus(item.data)
         val payload = Buffer.buffer(payloadS)
 
-        mqttClient.publish(
+        publishQueued(
             "qbus/" + item.serial + "/sensor/" + type.mqttName + "/" + item.data.id + "/${topic}",
             payload,
             MqttQoS.AT_LEAST_ONCE,
             false,
             retain
-        ) { ar ->
-            if (ar.failed()) {
-                LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
-                restart()
-            } else {
-                LOG.debug("MQTT publish OK")
-            }
-        }
-        mqttClient.publish(
+        )
+        publishQueued(
             "qbus/" + item.serial + "/state",
             Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(states)),
             MqttQoS.AT_LEAST_ONCE,
             false,
             true
-        ) { ar ->
-            if (ar.failed()) {
-                LOG.warn("Can't send MQTT message", ar.cause())
-            } else {
-                LOG.debug("MQTT publish OK")
-            }
-        }
+        )
         return MqttHandled.OK
     }
 
@@ -450,8 +435,40 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         }
     }
 
+    private data class PublishItem(
+        val topic: String,
+        val payload: Buffer,
+        val qos: MqttQoS,
+        val isDup: Boolean,
+        val retain: Boolean
+    )
+
+    private fun publishQueued(topic: String, payload: Buffer, qos: MqttQoS, isDup: Boolean, retain: Boolean) {
+        publishQueue.addLast(PublishItem(topic, payload, qos, isDup, retain))
+        drainPublishQueue()
+    }
+
+    private fun drainPublishQueue() {
+        while (started && inflightCount < MAX_INFLIGHT && publishQueue.isNotEmpty()) {
+            inflightCount++
+            val item = publishQueue.removeFirst()
+            // This callback fires when the packet is written to the socket, not on PUBACK.
+            // The slot is freed by publishCompletionHandler/publishCompletionExpirationHandler.
+            mqttClient.publish(item.topic, item.payload, item.qos, item.isDup, item.retain) { ar ->
+                if (!started) return@publish
+                if (ar.failed()) {
+                    inflightCount--
+                    LOG.warn("Can't send MQTT message, restarting connection", ar.cause())
+                    restart()
+                }
+            }
+        }
+    }
+
     companion object {
         private val LOG: Logger = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass())
+        private const val MAX_INFLIGHT = 5
+        private const val ACK_TIMEOUT_SECONDS = 30
         private val PATTERN_COMMAND = Pattern.compile("qbus/([^/]+)/sensor/([^/]+)/(\\d+)/command")
         private val PATTERN_AIRQUALITY = Pattern.compile("^/airquality/([^/]+)/sensor/([^/]+)$")
         val ADDRESS = "address_mqtt_verticle"

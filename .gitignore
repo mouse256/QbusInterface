@@ -8,3 +8,4 @@ build/
 *.pcap
 buildAndPublish.sh
 buildAndRun.sh
+log.log
