@@ -10,7 +10,7 @@ slf4j = "2.0.18"
 vertx-junit5 = "5.1.1"
 hamcrest = "3.0"
 log4j-slf4j2-impl = "2.26.0"
-jackson-databind = "2.21.3"
+jackson-databind = "2.22.0"
 jackson-module-kotlin = "2.21.3"
 
 [plugins]
