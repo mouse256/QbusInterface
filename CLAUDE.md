@@ -88,7 +88,6 @@ Quarkus CDI bean `ControllerHandler` (`@ApplicationScoped @Startup`) injects the
 
 The two verticles communicate exclusively via the Vert.x local event bus using `LocalOnlyCodec` (bypasses serialization for in-process messages). All codec types must be registered in `ControllerHandler.registerVertxCodecs`.
 
-Note: `qbusbridge/build.gradle.kts` force-pins `io.netty:netty-codec-mqtt:4.1.134.Final` to work around an MqttDecoder regression in Netty 4.1.133 (pinned by the Quarkus BOM); remove once the Quarkus BOM ships netty >= 4.1.134.
 
 ### MQTT Topic Convention
 

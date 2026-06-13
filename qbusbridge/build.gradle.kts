@@ -61,14 +61,5 @@ configurations {
     testRuntimeClasspath {
         exclude(group = "org.jboss.slf4j")
     }
-    all {
-        resolutionStrategy {
-            // Netty 4.1.133 (pinned by the Quarkus BOM) has a regression in MqttDecoder:
-            // a PUBLISH fragmented mid-variable-header throws TooLongFrameException
-            // instead of waiting for more data. Fixed in 4.1.134 (netty/netty#16838).
-            // Remove once the Quarkus BOM ships netty >= 4.1.134.Final.
-            force("io.netty:netty-codec-mqtt:4.1.134.Final")
-        }
-    }
 }
 
