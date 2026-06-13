@@ -88,7 +88,6 @@ Quarkus CDI bean `ControllerHandler` (`@ApplicationScoped @Startup`) injects the
 
 The two verticles communicate exclusively via the Vert.x local event bus using `LocalOnlyCodec` (bypasses serialization for in-process messages). All codec types must be registered in `ControllerHandler.registerVertxCodecs`.
 
-
 ### MQTT Topic Convention
 
 ```
