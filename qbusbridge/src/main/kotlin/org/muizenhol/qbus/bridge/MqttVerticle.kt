@@ -11,7 +11,10 @@ import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
 import org.muizenhol.homeassistant.discovery.Discovery
 import org.muizenhol.homeassistant.discovery.component.*
-import org.muizenhol.qbus.bridge.type.*
+import org.muizenhol.qbus.bridge.type.MqttHandled
+import org.muizenhol.qbus.bridge.type.MqttItemWrapper
+import org.muizenhol.qbus.bridge.type.MqttType
+import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.muizenhol.qbus.sddata.*
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -194,19 +197,20 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             val deviceWithMeta: ComponentWithMeta? = when (output) {
                 is SdOutputOnOff, is SdOutputTimer2, is SdOutputTimer -> ComponentWithMeta(
                     Switch.Builder()
-                        .withName(output.name)
+                        .withName("relay")
                         .withUniqueId(uuid)
                         .withCommandTopic(commandTopic)
                         .withStateTopic("${topicPrefix}/state")
                         .withPayloadOn("255")
                         .withPayloadOff("0")
                         .build(),
+                    output.name,
                     "relay"
                 )
 
                 is SdOutputDimmer -> ComponentWithMeta(
                     Light.Builder()
-                        .withName(output.name)
+                        .withName("dimmer")
                         .withUniqueId(uuid)
                         .withCommandTopic(commandTopic)
                         .withStateTopic("${topicPrefix}/actualState")
@@ -217,18 +221,20 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                         .withBrightnessCommandTopic(commandTopic)
                         .withOnCommandType("brightness")
                         .build(),
+                    output.name,
                     "dimmer"
                 )
 
                 is SdOutputThermostat -> ComponentWithMeta(
                     Climate.Builder()
-                        .withName(output.name)
+                        .withName("thermostat")
                         .withUniqueId(uuid)
                         .withTempStep(0.5)
                         .withModes(SdOutputThermostat.Mode.entries.map { m -> m.name }.toList())
                         .withTemperatureStateTopic("${topicPrefix}/set")
                         .withCurrentTemperatureTopic("${topicPrefix}/measured")
                         .build(),
+                    output.name,
                     "thermostat"
                 )
 
@@ -248,7 +254,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                         id,
                         "Qbus",
                         "Qbus ${deviceWithMeta.type}",
-                        device.name,
+                        "Qbus ${deviceWithMeta.name}",
                         idQbus
                     ),
                     Discovery.Origin(
@@ -272,7 +278,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
     private val states = mutableMapOf<String, MutableMap<Int, State>>()
 
-    data class ComponentWithMeta(val comp: Component, val type: String)
+    data class ComponentWithMeta(val comp: Component, val name: String, val type: String)
     data class State(val type: String, val payload: String, val name: String, val place: String)
 
     private fun publish(item: MqttItemWrapper): MqttHandled {
@@ -282,28 +288,34 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 publishTopic(item, data.asInt().toString(), "state")
                 data.asInt().toString()
             }
+
             is SdOutputDimmer -> {
                 publishTopic(item, if (data.asInt() > 0) "ON" else "OFF", "actualState")
                 publishTopic(item, data.asInt().toString(), "state")
                 data.asInt().toString()
             }
+
             is SdOutputTimer -> {
                 publishTopic(item, data.asInt().toString(), "state")
                 data.asInt().toString()
             }
+
             is SdOutputTimer2 -> {
                 publishTopic(item, data.asInt().toString(), "state")
                 data.asInt().toString()
             }
+
             is SdOutputThermostat -> {
                 publishTopic(item, data.getTempSet().toString(), "set")
                 publishTopic(item, data.getTempMeasured().toString(), "measured")
                 data.getTempSet().toString()
             }
+
             is SdOutputAudio -> {
                 publishTopic(item, data.asInt().toString(), "event", retain = false)
                 null  // audio events not stored in snapshot
             }
+
             is SdOutputAudioGroup -> null
         }
 
