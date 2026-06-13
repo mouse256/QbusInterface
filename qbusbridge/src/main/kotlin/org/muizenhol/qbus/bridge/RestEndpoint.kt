@@ -18,7 +18,7 @@ import org.muizenhol.qbus.bridge.openhab.OpenHabFormatter
 
 
 @Path("/qbus")
-class ExampleResource {
+class QbusResource {
 
     @Inject
     @field: Default
@@ -36,14 +36,6 @@ class ExampleResource {
     @Produces(MediaType.APPLICATION_JSON)
     fun raw(): SdDataStruct? {
         return controller.getDataHandler()?.data
-    }
-
-    @GET
-    @Path("readerror")
-    @Produces(MediaType.TEXT_PLAIN)
-    fun readError() {
-        LOG.info("Triggering read error")
-        // return controller.controller.triggerReadError()
     }
 
     @GET

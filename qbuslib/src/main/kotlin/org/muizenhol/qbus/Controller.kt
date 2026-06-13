@@ -2,7 +2,11 @@
 
 package org.muizenhol.qbus
 
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.muizenhol.qbus.datatype.*
@@ -42,6 +46,8 @@ class Controller(
     private var downloader: Downloader? = null
     private var stateFetcher: StateFetcher? = null
     var dataHandler: DataHandler? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var pendingReconnect: Job? = null
 
     override fun onConnectionClosed() {
         LOG.info("Restarting connection as connection close is detected")
@@ -269,23 +275,26 @@ class Controller(
     }
 
     fun restart() {
+        if (pendingReconnect?.isActive == true) {
+            LOG.debug("Reconnect already pending, skipping")
+            return
+        }
         LOG.info("Restarting login in {}", reconnectTimeout)
         try {
-            //try to close again, just in case not all resources were cleaned
             conn.close()
         } catch (e: Exception) {
-            //Don't care
+            // best-effort cleanup
         }
-        val ctrl = this
-        GlobalScope.launch {
+        pendingReconnect = scope.launch {
             delay(reconnectTimeout.toMillis())
             LOG.info("Restarting login now")
-            conn = connectionCreator.invoke(host, port, ctrl)
+            conn = connectionCreator.invoke(host, port, this@Controller)
             start()
         }
     }
 
     override fun close() {
+        scope.cancel()
         conn.close()
     }
 

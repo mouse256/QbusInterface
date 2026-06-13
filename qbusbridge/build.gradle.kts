@@ -13,9 +13,9 @@ dependencies {
     implementation("io.quarkus:quarkus-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("io.quarkus:quarkus-arc")
+    implementation("io.quarkus:quarkus-vertx")
     implementation("io.quarkus:quarkus-resteasy")
     implementation("io.quarkus:quarkus-resteasy-jackson")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("io.vertx:vertx-mqtt")
     implementation(project(":qbuslib"))
     implementation("org.muizenhol:homeassistant-discovery:1.0.0")
@@ -31,7 +31,7 @@ dependencies {
 
 }
 
-group = "org.acme"
+group = "org.muizenhol"
 version = "1.0.0-SNAPSHOT"
 
 java {
@@ -60,15 +60,6 @@ tasks {
 configurations {
     testRuntimeClasspath {
         exclude(group = "org.jboss.slf4j")
-    }
-    all {
-        resolutionStrategy {
-            // Netty 4.1.133 (pinned by the Quarkus BOM) has a regression in MqttDecoder:
-            // a PUBLISH fragmented mid-variable-header throws TooLongFrameException
-            // instead of waiting for more data. Fixed in 4.1.134 (netty/netty#16838).
-            // Remove once the Quarkus BOM ships netty >= 4.1.134.Final.
-            force("io.netty:netty-codec-mqtt:4.1.134.Final")
-        }
     }
 }
 

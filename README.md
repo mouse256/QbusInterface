@@ -9,7 +9,7 @@ This software communicates with the Qbus controller, and exposes this informatio
 
 # Building
 ```
-./gradlew quarkusBuild -Dquarkus.package.type=uber-jar
+./gradlew quarkusBuild -Dquarkus.package.jar.type=uber-jar
 ```
 
 This will produce an executable java file in:

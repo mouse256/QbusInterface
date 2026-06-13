@@ -308,6 +308,25 @@ class MqttVerticleTest() {
     }
 
     @Test
+    fun testStateSnapshot(vertx: Vertx, vertxContext: VertxTestContext) {
+        start(vertx, vertxContext) {
+            val snapshotCheckpoint = vertxContext.checkpoint()
+            mqttClient!!.publishHandler { msg ->
+                if (msg.topicName() == "qbus/12345/state") {
+                    val payload = msg.payload().toString(StandardCharsets.UTF_8)
+                    // After a switch update the snapshot must contain the serial and the output id
+                    if (payload.contains("12345") && payload.contains("\"type\"")) {
+                        snapshotCheckpoint.flag()
+                    }
+                }
+            }
+            mqttClient!!.subscribe("qbus/#", MqttQoS.AT_LEAST_ONCE.value())
+            val item = mkSwitch("12345", 1, 0xFF.toByte())
+            send(vertx, vertxContext, item, MqttHandled.OK)
+        }
+    }
+
+    @Test
     fun testHomeAssitantDiscovery(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
             expectMqtt(vertxContext, "homeassistant/device/qbus-mqtt-dummySerial/qbus-dummySerial/config", null)

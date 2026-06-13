@@ -2,8 +2,6 @@ package org.muizenhol.qbus.bridge
 
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
-import io.vertx.core.Handler
-import io.vertx.core.Promise
 import io.vertx.core.eventbus.Message
 import io.vertx.core.eventbus.MessageConsumer
 import org.muizenhol.qbus.Controller
@@ -43,15 +41,18 @@ class QbusVerticle private constructor() : AbstractVerticle() {
         LOG.info("Starting")
         consumerStatus = vertx.eventBus().localConsumer(ADDRESS_STATUS, this::handleStatusRequest)
         consumer = vertx.eventBus().localConsumer(ADDRESS_UPDATE_QBUS_ITEM, this::handleQbusUpdateItem)
-        try {
-            controller.start()
-        } catch (e: Exception) {
-            LOG.warn("Error starting controller, retrying", e)
-            controller.restart()
-        }
+        vertx.executeBlocking(Callable {
+            try {
+                controller.start()
+            } catch (e: Exception) {
+                LOG.warn("Error starting controller, retrying", e)
+                controller.restart()
+            }
+        })
     }
 
     override fun stop() {
+        consumerStatus.unregister()
         consumer.unregister()
         controller.close()
     }
@@ -72,20 +73,14 @@ class QbusVerticle private constructor() : AbstractVerticle() {
     }
 
     private fun sendAllStates() {
-        //publish current state
         if (dataHandler == null) {
             LOG.debug("Qbus not yet initialized, ignoring request")
         } else {
-            LOG.info("Publish current state 1")
+            LOG.info("Publish current state")
             vertx.eventBus().publish(MqttVerticle.ADDRESS_INFO, dataHandler!!.data)
-            LOG.info("Publish current state 2")
-            vertx.executeBlocking(Callable {
-                    dataHandler!!.data.outputs.values.forEach { out ->
-                        Thread.sleep(20) //add a small delay to avoid overloading the mqtt bus
-                        onDataUpdate(dataHandler!!.data.serialNumber, out)
-                    }
-                }
-            )
+            dataHandler!!.data.outputs.values.forEach { out ->
+                onDataUpdate(dataHandler!!.data.serialNumber, out)
+            }
         }
     }
 
