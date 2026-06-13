@@ -1,7 +1,6 @@
 package org.muizenhol.qbus.bridge
 
 import io.quarkus.runtime.Startup
-import io.vertx.core.AsyncResult
 import io.vertx.core.Vertx
 import org.muizenhol.qbus.DataHandler
 import org.muizenhol.qbus.bridge.type.MqttHandled
@@ -30,8 +29,6 @@ class ControllerHandler {
     lateinit var vertx: Vertx
 
     lateinit var qbusVerticle: QbusVerticle
-    val verticles = mutableListOf<String>()
-
 
     @PostConstruct
     @Suppress("unused")
@@ -54,18 +51,13 @@ class ControllerHandler {
         registerVertxCodecs(vertx)
 
         val mqttVerticle = MqttVerticle(mqttHost, mqttPort)
-        vertx.deployVerticle(mqttVerticle)
+        vertx.deployVerticle(mqttVerticle) { ar ->
+            if (ar.failed()) LOG.error("MqttVerticle deploy failed", ar.cause())
+        }
 
         qbusVerticle = QbusVerticle(username, password, serial, host)
-        vertx.deployVerticle(qbusVerticle, this::verticleDeployed)
-    }
-
-    fun verticleDeployed(id: AsyncResult<String>) {
-        if (id.failed()) {
-            LOG.error("Verticle deploy failed", id.cause())
-        } else {
-            LOG.info("Verticle deployed: {}", id.result())
-            verticles.add(id.result())
+        vertx.deployVerticle(qbusVerticle) { ar ->
+            if (ar.failed()) LOG.error("QbusVerticle deploy failed", ar.cause())
         }
     }
 
@@ -74,9 +66,6 @@ class ControllerHandler {
     fun destroy() {
         LOG.info("Destroying")
         unregisterVertxCodecs(vertx)
-        verticles.forEach { id ->
-            vertx.undeploy(id)
-        }
     }
 
     fun getDataHandler(): DataHandler? {
