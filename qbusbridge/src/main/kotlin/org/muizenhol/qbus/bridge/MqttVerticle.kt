@@ -238,6 +238,23 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     "thermostat"
                 )
 
+                is SdOutputShutter -> ComponentWithMeta(
+                    Cover.Builder()
+                        .withName("shutter")
+                        .withUniqueId(uuid)
+                        .withCommandTopic(commandTopic)
+                        .withStateTopic(stateTopic)
+                        .withPayloadOpen(MqttType.SHUTTER_PAYLOAD_OPEN)
+                        .withPayloadClose(MqttType.SHUTTER_PAYLOAD_CLOSE)
+                        .withPayloadStop(MqttType.SHUTTER_PAYLOAD_STOP)
+                        .withStateOpening(MqttType.SHUTTER_STATE_OPENING)
+                        .withStateClosing(MqttType.SHUTTER_STATE_CLOSING)
+                        .withStateStopped(MqttType.SHUTTER_STATE_STOPPED)
+                        .build(),
+                    output.name,
+                    "shutter"
+                )
+
                 else -> {
                     LOG.warn("Ignoring {} in homeAssitant discovery", output.javaClass)
                     null
@@ -309,6 +326,12 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 publishTopic(item, data.getTempSet().toString(), "set")
                 publishTopic(item, data.getTempMeasured().toString(), "measured")
                 data.getTempSet().toString()
+            }
+
+            is SdOutputShutter -> {
+                val state = shutterState(data.status)
+                publishTopic(item, state, "state")
+                state
             }
 
             is SdOutputAudio -> {
@@ -394,6 +417,11 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                         setTemp(pay)
                     }
 
+                MqttType.SHUTTER ->
+                    SdOutputShutter(id, "", 0x00, 0x00, -1, placeDummy, false).apply {
+                        status = convertPayloadShutter(payload) ?: return
+                    }
+
                 MqttType.EVENT -> {
                     LOG.warn("Event can't be translated to Qbus")
                     return
@@ -432,6 +460,24 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         } else {
             LOG.warn("Invalid dimmer payload: {}", payload)
             return null
+        }
+    }
+
+    private fun shutterState(status: SdOutputShutter.Status): String = when (status) {
+        SdOutputShutter.Status.UP -> MqttType.SHUTTER_STATE_OPENING
+        SdOutputShutter.Status.DOWN -> MqttType.SHUTTER_STATE_CLOSING
+        SdOutputShutter.Status.STOP -> MqttType.SHUTTER_STATE_STOPPED
+    }
+
+    private fun convertPayloadShutter(payload: String): SdOutputShutter.Status? {
+        return when (payload) {
+            MqttType.SHUTTER_PAYLOAD_OPEN -> SdOutputShutter.Status.UP
+            MqttType.SHUTTER_PAYLOAD_CLOSE -> SdOutputShutter.Status.DOWN
+            MqttType.SHUTTER_PAYLOAD_STOP -> SdOutputShutter.Status.STOP
+            else -> {
+                LOG.warn("Invalid shutter payload: {}", payload)
+                null
+            }
         }
     }
 

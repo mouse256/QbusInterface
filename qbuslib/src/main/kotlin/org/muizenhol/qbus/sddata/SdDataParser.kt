@@ -110,6 +110,17 @@ class SdDataParser {
                 readonly = isReadOnly(outJson.originalName),
             )
 
+            SdDataStruct.Type.SHUTTER
+            -> SdOutputShutter(
+                name = outJson.originalName,
+                id = outJson.id,
+                address = outJson.address.toByte(),
+                subAddress = outJson.subAddress.toByte(),
+                controllerId = outJson.controllerId,
+                place = place,
+                readonly = isReadOnly(outJson.originalName),
+            )
+
             SdDataStruct.Type.THERMOSTAT,
             SdDataStruct.Type.THERMOSTAT2,
             -> {
@@ -427,6 +438,79 @@ data class SdOutputDimmer(
             LOG.warn("Invalid data type: {}", newData.javaClass)
         }
         return false
+    }
+}
+
+/**
+ * Rolling shutter / blind (Qbus "Rolluik", typeId 24).
+ *
+ * The controller exposes a shutter through two consecutive subaddress bytes: the byte at
+ * [subAddress] flags the "up" movement, the byte at [subAddress] + 1 flags the "down" movement.
+ * A byte is set to 0xFF while that direction is active; when neither is set the shutter is stopped.
+ * Two shutters share a single address (one at subaddress 0/1, one at subaddress 2/3).
+ *
+ * To drive the shutter we write the [Status] value (0 = stop, 1 = up, 2 = down) at the shutter's
+ * subaddress, mirroring how the manufacturer's client builds its command.
+ */
+data class SdOutputShutter(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val subAddress: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput() {
+    var status: Status = Status.STOP
+    override val typeName = "Shutter"
+
+    override fun clone(): SdOutput = copy().also { it.status = status }
+
+    override fun getAddressStatus(): AddressStatus =
+        AddressStatus(
+            address,
+            subAddress,
+            data = byteArrayOf(0x00, status.value),
+            write = true
+        )
+
+    override fun printValue(): String = status.name
+
+    override fun update(newData: ByteArray, event: Boolean): Boolean {
+        val upIndex = subAddress.toInt()
+        val downIndex = upIndex + 1
+        if (downIndex >= newData.size) {
+            LOG.warn("Unexpected subaddress {} on {} ({})", subAddress, address, name)
+            return false
+        }
+        val newStatus = when (0xFF.toByte()) {
+            newData[upIndex] -> Status.UP
+            newData[downIndex] -> Status.DOWN
+            else -> Status.STOP
+        }
+        if (status == newStatus) {
+            return false
+        }
+        status = newStatus
+        return true
+    }
+
+    override fun update(newData: SdOutput): Boolean {
+        if (newData is SdOutputShutter) {
+            if (status != newData.status) {
+                status = newData.status
+                return true
+            }
+        } else {
+            LOG.warn("Invalid data type: {}", newData.javaClass)
+        }
+        return false
+    }
+
+    enum class Status(val value: Byte) {
+        STOP(0x00),
+        UP(0x01),
+        DOWN(0x02),
     }
 }
 

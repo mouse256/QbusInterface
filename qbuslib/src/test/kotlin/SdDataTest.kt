@@ -14,6 +14,7 @@ import org.muizenhol.qbus.sddata.SdDataParser
 import org.muizenhol.qbus.sddata.SdOutputAudio
 import org.muizenhol.qbus.sddata.SdOutputAudioGroup
 import org.muizenhol.qbus.sddata.SdOutputOnOff
+import org.muizenhol.qbus.sddata.SdOutputShutter
 import org.slf4j.LoggerFactory
 import java.io.BufferedOutputStream
 import java.io.File
@@ -147,6 +148,45 @@ class SdDataTest : StringSpec() {
             assertThat(audioBadkamerPlayPause.id,equalTo(672))
             assertThat(audioBadkamerPlayPause.javaClass, equalTo(SdOutputOnOff::class.java))
 
+        }
+
+        "Parsing shutters" {
+            val parser = SdDataParser()
+            val stream = this.javaClass.getResourceAsStream("/sddata.zip")
+                ?: throw IllegalStateException("Can't find resource sddata.zip")
+            parser.addData(stream.readAllBytes())
+            val parsed = parser.parse() ?: throw IllegalStateException("Can't parse data")
+
+            val shutters = parsed.outputs.values.filterIsInstance<SdOutputShutter>()
+            assertThat(shutters.size, equalTo(6))
+
+            // Two shutters share address 0x0C: one at subaddress 0/1, one at subaddress 2/3.
+            val shutterSub0 = shutters.first { it.address == 0x0C.toByte() && it.subAddress == 0x00.toByte() }
+            val shutterSub2 = shutters.first { it.address == 0x0C.toByte() && it.subAddress == 0x02.toByte() }
+
+            // Event data carries one byte per subaddress; 0xFF flags the active direction.
+            // up active for the sub-0 shutter (byte 0), down active for the sub-2 shutter (byte 3)
+            val event = byteArrayOf(0xFF.toByte(), 0x00, 0x00, 0xFF.toByte())
+            assert(shutterSub0.update(event, true))
+            assert(shutterSub2.update(event, true))
+            assertThat(shutterSub0.status, equalTo(SdOutputShutter.Status.UP))
+            assertThat(shutterSub2.status, equalTo(SdOutputShutter.Status.DOWN))
+
+            // No change -> no update reported
+            assert(!shutterSub0.update(event, true))
+
+            // All bytes cleared -> stopped
+            val stopped = byteArrayOf(0x00, 0x00, 0x00, 0x00)
+            assert(shutterSub0.update(stopped, true))
+            assertThat(shutterSub0.status, equalTo(SdOutputShutter.Status.STOP))
+
+            // A command writes the status value at the shutter's subaddress.
+            shutterSub2.status = SdOutputShutter.Status.UP
+            val cmd = shutterSub2.getAddressStatus()
+            assertThat(cmd.address, equalTo(0x0C.toByte()))
+            assertThat(cmd.subAddress, equalTo(0x02.toByte()))
+            assertThat(cmd.write, equalTo(true))
+            assertThat(cmd.data.toList(), equalTo(listOf(0x00.toByte(), 0x01.toByte())))
         }
 
     }
