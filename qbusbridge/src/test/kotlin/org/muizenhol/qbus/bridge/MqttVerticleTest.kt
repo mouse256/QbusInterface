@@ -24,6 +24,7 @@ import org.muizenhol.qbus.bridge.type.StatusRequest
 import org.muizenhol.qbus.sddata.SdDataStruct
 import org.muizenhol.qbus.sddata.SdOutputDimmer
 import org.muizenhol.qbus.sddata.SdOutputOnOff
+import org.muizenhol.qbus.sddata.SdOutputShutter
 import org.slf4j.LoggerFactory
 import java.lang.invoke.MethodHandles
 import java.nio.charset.StandardCharsets
@@ -212,6 +213,107 @@ class MqttVerticleTest() {
             expectMqtt(vertxContext, "qbus/12345/sensor/dimmer/1/state", "187")
             val item = mkDimmer("12345", 1, 0xBB.toByte())
             send(vertx, vertxContext, item, MqttHandled.OK)
+        }
+    }
+
+    private fun mkShutter(serial: String, id: Int, percentage: Int): MqttItemWrapper {
+        return MqttItemWrapper(
+            serial,
+            SdOutputShutter(id, "", 0x00, 0x00, -1, place, false).apply {
+                setPercentage(percentage)
+            })
+    }
+
+    @Test
+    fun testShutterStateOpen(vertx: Vertx, vertxContext: VertxTestContext) {
+        start(vertx, vertxContext) {
+            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/1/state", "100")
+            val item = mkShutter("12345", 1, 100)
+            send(vertx, vertxContext, item, MqttHandled.OK)
+        }
+    }
+
+    @Test
+    fun testShutterStateHalf(vertx: Vertx, vertxContext: VertxTestContext) {
+        start(vertx, vertxContext) {
+            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/2/state", "50")
+            val item = mkShutter("12345", 2, 50)
+            send(vertx, vertxContext, item, MqttHandled.OK)
+        }
+    }
+
+    @Test
+    fun testShutterStateClosed(vertx: Vertx, vertxContext: VertxTestContext) {
+        start(vertx, vertxContext) {
+            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/3/state", "0")
+            val item = mkShutter("12345", 3, 0)
+            send(vertx, vertxContext, item, MqttHandled.OK)
+        }
+    }
+
+    @Test
+    fun testShutterCommandOpen(vertx: Vertx, vertxContext: VertxTestContext) {
+        val expected = mkShutter("12345", 1, 100)
+        expectItem(vertx, vertxContext, expected)
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/shutter/1/command",
+                Buffer.buffer("OPEN"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
+        }
+    }
+
+    @Test
+    fun testShutterCommandClose(vertx: Vertx, vertxContext: VertxTestContext) {
+        val expected = mkShutter("12345", 1, 0)
+        expectItem(vertx, vertxContext, expected)
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/shutter/1/command",
+                Buffer.buffer("CLOSE"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
+        }
+    }
+
+    @Test
+    fun testShutterCommandPosition(vertx: Vertx, vertxContext: VertxTestContext) {
+        val expected = mkShutter("12345", 1, 50)
+        expectItem(vertx, vertxContext, expected)
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/shutter/1/command",
+                Buffer.buffer("50"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
+        }
+    }
+
+    @Test
+    fun testShutterCommandStopIgnored(vertx: Vertx, vertxContext: VertxTestContext) {
+        val checkpoint = vertxContext.checkpoint()
+        vertx.setTimer(1000) { checkpoint.flag() }
+        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) { _: Message<MqttItemWrapper> ->
+            vertxContext.failNow(IllegalStateException("no data expected for STOP"))
+        }
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/shutter/1/command",
+                Buffer.buffer("STOP"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
+        }
+    }
+
+    @Test
+    fun testShutterCommandInvalid(vertx: Vertx, vertxContext: VertxTestContext) {
+        val checkpoint = vertxContext.checkpoint()
+        vertx.setTimer(1000) { checkpoint.flag() }
+        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) { _: Message<MqttItemWrapper> ->
+            vertxContext.failNow(IllegalStateException("no data expected"))
+        }
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/shutter/1/command",
+                Buffer.buffer("garbage"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
         }
     }
 

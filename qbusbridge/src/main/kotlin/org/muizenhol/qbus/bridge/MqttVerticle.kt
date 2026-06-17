@@ -238,6 +238,23 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     "thermostat"
                 )
 
+                is SdOutputShutter -> ComponentWithMeta(
+                    Cover.Builder()
+                        .withName("shutter")
+                        .withUniqueId(uuid)
+                        // Open/close buttons and the position slider share the command topic.
+                        .withCommandTopic(commandTopic)
+                        .withSetPositionTopic(commandTopic)
+                        .withPositionTopic(stateTopic)
+                        .withPayloadOpen(MqttType.SHUTTER_PAYLOAD_OPEN)
+                        .withPayloadClose(MqttType.SHUTTER_PAYLOAD_CLOSE)
+                        .withPositionOpen(MqttType.SHUTTER_POSITION_OPEN)
+                        .withPositionClosed(MqttType.SHUTTER_POSITION_CLOSED)
+                        .build(),
+                    output.name,
+                    "shutter"
+                )
+
                 else -> {
                     LOG.warn("Ignoring {} in homeAssitant discovery", output.javaClass)
                     null
@@ -309,6 +326,12 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 publishTopic(item, data.getTempSet().toString(), "set")
                 publishTopic(item, data.getTempMeasured().toString(), "measured")
                 data.getTempSet().toString()
+            }
+
+            is SdOutputShutter -> {
+                val position = data.getPercentage().toString()
+                publishTopic(item, position, "state")
+                position
             }
 
             is SdOutputAudio -> {
@@ -394,6 +417,11 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                         setTemp(pay)
                     }
 
+                MqttType.SHUTTER ->
+                    SdOutputShutter(id, "", 0x00, 0x00, -1, placeDummy, false).apply {
+                        setPercentage(convertPayloadShutter(payload) ?: return)
+                    }
+
                 MqttType.EVENT -> {
                     LOG.warn("Event can't be translated to Qbus")
                     return
@@ -432,6 +460,30 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         } else {
             LOG.warn("Invalid dimmer payload: {}", payload)
             return null
+        }
+    }
+
+    /**
+     * Translate a shutter command into a target position percentage (0 = closed, 100 = open).
+     * Accepts HomeAssistant (OPEN/CLOSE) and OpenHab (UP/DOWN) keywords as well as a bare 0-100
+     * position. STOP is not supported by the ROL02P protocol.
+     */
+    private fun convertPayloadShutter(payload: String): Int? {
+        return when (payload.uppercase()) {
+            MqttType.SHUTTER_PAYLOAD_OPEN, "UP" -> MqttType.SHUTTER_POSITION_OPEN
+            MqttType.SHUTTER_PAYLOAD_CLOSE, "DOWN" -> MqttType.SHUTTER_POSITION_CLOSED
+            "STOP" -> {
+                LOG.debug("Shutter stop is not supported by the controller, ignoring")
+                null
+            }
+
+            else -> {
+                val position = payload.toDoubleOrNull()?.toInt()?.takeIf { it in 0..100 }
+                if (position == null) {
+                    LOG.warn("Invalid shutter payload: {}", payload)
+                }
+                position
+            }
         }
     }
 

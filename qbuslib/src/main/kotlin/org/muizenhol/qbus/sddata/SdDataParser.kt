@@ -110,6 +110,17 @@ class SdDataParser {
                 readonly = isReadOnly(outJson.originalName),
             )
 
+            SdDataStruct.Type.SHUTTER
+            -> SdOutputShutter(
+                name = outJson.originalName,
+                id = outJson.id,
+                address = outJson.address.toByte(),
+                subAddress = outJson.subAddress.toByte(),
+                controllerId = outJson.controllerId,
+                place = place,
+                readonly = isReadOnly(outJson.originalName),
+            )
+
             SdDataStruct.Type.THERMOSTAT,
             SdDataStruct.Type.THERMOSTAT2,
             -> {
@@ -419,6 +430,57 @@ data class SdOutputDimmer(
 
     override fun update(newData: SdOutput): Boolean {
         if (newData is SdOutputDimmer) {
+            if (value != newData.value) {
+                value = newData.value
+                return true
+            }
+        } else {
+            LOG.warn("Invalid data type: {}", newData.javaClass)
+        }
+        return false
+    }
+}
+
+/**
+ * Rolling shutter / blind with position feedback (Qbus "ROL02P", typeId 24).
+ *
+ * The controller reports a single position byte at [subAddress]: 0x00 = fully closed,
+ * 0xFF = fully open. The position percentage is `round(value / 255 * 100)`. Two shutters share
+ * a single address (one at subaddress 0, one at subaddress 2); the byte right after each position
+ * byte carries the slat angle on slatted outputs (ROL02PSlat, typeId 34), which we don't support.
+ *
+ * Commands write the target position byte at [subAddress] (open = 0xFF, close = 0x00, or any
+ * intermediate position), mirroring how the manufacturer's client builds its command. The
+ * protocol has no separate "stop" command for this output type.
+ */
+data class SdOutputShutter(
+    override val id: Int,
+    override val name: String,
+    override val address: Byte,
+    override val subAddress: Byte,
+    override val controllerId: Int,
+    override val place: SdDataStruct.Place,
+    override val readonly: Boolean,
+) : SdOutput(), SingleValue {
+    /** Raw position: 0x00 = closed, 0xFF = open. */
+    override var value: Byte = 0x00
+    override val typeName = "Shutter"
+
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
+    override fun printValue(): String = "${getPercentage()}% (0x${Common.byteToHex(value)})"
+    override fun update(newData: ByteArray, event: Boolean): Boolean = singleValueUpdate(this, newData)
+
+    /** Position as a percentage, 0 = closed, 100 = open. */
+    fun getPercentage(): Int = ((value.toInt() and 0xff) * 100.0 / 255.0).roundToInt()
+
+    /** Set the position from a percentage (0 = closed, 100 = open). */
+    fun setPercentage(percentage: Int) {
+        value = (percentage.coerceIn(0, 100) * 255.0 / 100.0).roundToInt().toByte()
+    }
+
+    override fun update(newData: SdOutput): Boolean {
+        if (newData is SdOutputShutter) {
             if (value != newData.value) {
                 value = newData.value
                 return true

@@ -14,6 +14,7 @@ import org.muizenhol.qbus.sddata.SdDataParser
 import org.muizenhol.qbus.sddata.SdOutputAudio
 import org.muizenhol.qbus.sddata.SdOutputAudioGroup
 import org.muizenhol.qbus.sddata.SdOutputOnOff
+import org.muizenhol.qbus.sddata.SdOutputShutter
 import org.slf4j.LoggerFactory
 import java.io.BufferedOutputStream
 import java.io.File
@@ -147,6 +148,46 @@ class SdDataTest : StringSpec() {
             assertThat(audioBadkamerPlayPause.id,equalTo(672))
             assertThat(audioBadkamerPlayPause.javaClass, equalTo(SdOutputOnOff::class.java))
 
+        }
+
+        "Parsing shutters" {
+            val parser = SdDataParser()
+            val stream = this.javaClass.getResourceAsStream("/sddata.zip")
+                ?: throw IllegalStateException("Can't find resource sddata.zip")
+            parser.addData(stream.readAllBytes())
+            val parsed = parser.parse() ?: throw IllegalStateException("Can't parse data")
+
+            val shutters = parsed.outputs.values.filterIsInstance<SdOutputShutter>()
+            assertThat(shutters.size, equalTo(6))
+
+            // Two shutters share address 0x0C: one at subaddress 0, one at subaddress 2.
+            // Each owns a single position byte at its subaddress (0x00 = closed, 0xFF = open).
+            val shutterSub0 = shutters.first { it.address == 0x0C.toByte() && it.subAddress == 0x00.toByte() }
+            val shutterSub2 = shutters.first { it.address == 0x0C.toByte() && it.subAddress == 0x02.toByte() }
+
+            // Event data carries one position byte per subaddress.
+            // sub-0 fully open (byte 0 = 0xFF), sub-2 half open (byte 2 = 0x80)
+            val event = byteArrayOf(0xFF.toByte(), 0x00, 0x80.toByte(), 0x00)
+            assert(shutterSub0.update(event, true))
+            assert(shutterSub2.update(event, true))
+            assertThat(shutterSub0.getPercentage(), equalTo(100))
+            assertThat(shutterSub2.getPercentage(), equalTo(50))
+
+            // No change -> no update reported
+            assert(!shutterSub0.update(event, true))
+
+            // Closing the sub-0 shutter
+            val closed = byteArrayOf(0x00, 0x00, 0x80.toByte(), 0x00)
+            assert(shutterSub0.update(closed, true))
+            assertThat(shutterSub0.getPercentage(), equalTo(0))
+
+            // A command writes the target position byte at the shutter's subaddress.
+            shutterSub2.setPercentage(100)
+            val cmd = shutterSub2.getAddressStatus()
+            assertThat(cmd.address, equalTo(0x0C.toByte()))
+            assertThat(cmd.subAddress, equalTo(0x02.toByte()))
+            assertThat(cmd.write, equalTo(true))
+            assertThat(cmd.data.toList(), equalTo(listOf(0x00.toByte(), 0xFF.toByte())))
         }
 
     }
