@@ -160,33 +160,34 @@ class SdDataTest : StringSpec() {
             val shutters = parsed.outputs.values.filterIsInstance<SdOutputShutter>()
             assertThat(shutters.size, equalTo(6))
 
-            // Two shutters share address 0x0C: one at subaddress 0/1, one at subaddress 2/3.
+            // Two shutters share address 0x0C: one at subaddress 0, one at subaddress 2.
+            // Each owns a single position byte at its subaddress (0x00 = closed, 0xFF = open).
             val shutterSub0 = shutters.first { it.address == 0x0C.toByte() && it.subAddress == 0x00.toByte() }
             val shutterSub2 = shutters.first { it.address == 0x0C.toByte() && it.subAddress == 0x02.toByte() }
 
-            // Event data carries one byte per subaddress; 0xFF flags the active direction.
-            // up active for the sub-0 shutter (byte 0), down active for the sub-2 shutter (byte 3)
-            val event = byteArrayOf(0xFF.toByte(), 0x00, 0x00, 0xFF.toByte())
+            // Event data carries one position byte per subaddress.
+            // sub-0 fully open (byte 0 = 0xFF), sub-2 half open (byte 2 = 0x80)
+            val event = byteArrayOf(0xFF.toByte(), 0x00, 0x80.toByte(), 0x00)
             assert(shutterSub0.update(event, true))
             assert(shutterSub2.update(event, true))
-            assertThat(shutterSub0.status, equalTo(SdOutputShutter.Status.UP))
-            assertThat(shutterSub2.status, equalTo(SdOutputShutter.Status.DOWN))
+            assertThat(shutterSub0.getPercentage(), equalTo(100))
+            assertThat(shutterSub2.getPercentage(), equalTo(50))
 
             // No change -> no update reported
             assert(!shutterSub0.update(event, true))
 
-            // All bytes cleared -> stopped
-            val stopped = byteArrayOf(0x00, 0x00, 0x00, 0x00)
-            assert(shutterSub0.update(stopped, true))
-            assertThat(shutterSub0.status, equalTo(SdOutputShutter.Status.STOP))
+            // Closing the sub-0 shutter
+            val closed = byteArrayOf(0x00, 0x00, 0x80.toByte(), 0x00)
+            assert(shutterSub0.update(closed, true))
+            assertThat(shutterSub0.getPercentage(), equalTo(0))
 
-            // A command writes the status value at the shutter's subaddress.
-            shutterSub2.status = SdOutputShutter.Status.UP
+            // A command writes the target position byte at the shutter's subaddress.
+            shutterSub2.setPercentage(100)
             val cmd = shutterSub2.getAddressStatus()
             assertThat(cmd.address, equalTo(0x0C.toByte()))
             assertThat(cmd.subAddress, equalTo(0x02.toByte()))
             assertThat(cmd.write, equalTo(true))
-            assertThat(cmd.data.toList(), equalTo(listOf(0x00.toByte(), 0x01.toByte())))
+            assertThat(cmd.data.toList(), equalTo(listOf(0x00.toByte(), 0xFF.toByte())))
         }
 
     }

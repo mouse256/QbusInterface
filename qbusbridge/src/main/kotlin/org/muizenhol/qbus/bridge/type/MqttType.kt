@@ -16,7 +16,7 @@ enum class MqttType(val mqttName: String) {
             ON_OFF -> "off=\"0\", on=\"255\""
             DIMMER -> "min=\"0\", max=\"100\", transformationPattern=\"JS:255to100.js\", transformationPatternOut=\"JS:100to255.js\""
             THERMOSTAT -> "min=\"0\", max=\"30\", step=\"0.5\", unit=\"°C\""
-            SHUTTER -> "up=\"${SHUTTER_PAYLOAD_OPEN}\", down=\"${SHUTTER_PAYLOAD_CLOSE}\", stop=\"${SHUTTER_PAYLOAD_STOP}\""
+            SHUTTER -> ""
             EVENT -> ""
         }
     }
@@ -32,15 +32,13 @@ enum class MqttType(val mqttName: String) {
     }
 
     companion object {
-        // Command payloads shared between the HomeAssistant cover and the OpenHab rollershutter.
+        // Full-open / full-close command payloads understood on the shutter command topic.
+        // (HomeAssistant cover sends OPEN/CLOSE; OpenHab rollershutter sends UP/DOWN. A bare
+        // number 0-100 sets an exact position. The ROL02P protocol has no stop command.)
         const val SHUTTER_PAYLOAD_OPEN = "OPEN"
         const val SHUTTER_PAYLOAD_CLOSE = "CLOSE"
-        const val SHUTTER_PAYLOAD_STOP = "STOP"
-
-        // State payloads published on the shutter state topic.
-        const val SHUTTER_STATE_OPENING = "opening"
-        const val SHUTTER_STATE_CLOSING = "closing"
-        const val SHUTTER_STATE_STOPPED = "stopped"
+        const val SHUTTER_POSITION_OPEN = 100
+        const val SHUTTER_POSITION_CLOSED = 0
 
         fun fromQbus(item: SdOutput): MqttType {
             return when (item) {

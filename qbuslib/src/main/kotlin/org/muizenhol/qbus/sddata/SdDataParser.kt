@@ -442,15 +442,16 @@ data class SdOutputDimmer(
 }
 
 /**
- * Rolling shutter / blind (Qbus "Rolluik", typeId 24).
+ * Rolling shutter / blind with position feedback (Qbus "ROL02P", typeId 24).
  *
- * The controller exposes a shutter through two consecutive subaddress bytes: the byte at
- * [subAddress] flags the "up" movement, the byte at [subAddress] + 1 flags the "down" movement.
- * A byte is set to 0xFF while that direction is active; when neither is set the shutter is stopped.
- * Two shutters share a single address (one at subaddress 0/1, one at subaddress 2/3).
+ * The controller reports a single position byte at [subAddress]: 0x00 = fully closed,
+ * 0xFF = fully open. The position percentage is `round(value / 255 * 100)`. Two shutters share
+ * a single address (one at subaddress 0, one at subaddress 2); the byte right after each position
+ * byte carries the slat angle on slatted outputs (ROL02PSlat, typeId 34), which we don't support.
  *
- * To drive the shutter we write the [Status] value (0 = stop, 1 = up, 2 = down) at the shutter's
- * subaddress, mirroring how the manufacturer's client builds its command.
+ * Commands write the target position byte at [subAddress] (open = 0xFF, close = 0x00, or any
+ * intermediate position), mirroring how the manufacturer's client builds its command. The
+ * protocol has no separate "stop" command for this output type.
  */
 data class SdOutputShutter(
     override val id: Int,
@@ -460,57 +461,34 @@ data class SdOutputShutter(
     override val controllerId: Int,
     override val place: SdDataStruct.Place,
     override val readonly: Boolean,
-) : SdOutput() {
-    var status: Status = Status.STOP
+) : SdOutput(), SingleValue {
+    /** Raw position: 0x00 = closed, 0xFF = open. */
+    override var value: Byte = 0x00
     override val typeName = "Shutter"
 
-    override fun clone(): SdOutput = copy().also { it.status = status }
+    override fun clone(): SdOutput = copy()
+    override fun getAddressStatus(): AddressStatus = singleValueGetAddressStatus(this)
+    override fun printValue(): String = "${getPercentage()}% (0x${Common.byteToHex(value)})"
+    override fun update(newData: ByteArray, event: Boolean): Boolean = singleValueUpdate(this, newData)
 
-    override fun getAddressStatus(): AddressStatus =
-        AddressStatus(
-            address,
-            subAddress,
-            data = byteArrayOf(0x00, status.value),
-            write = true
-        )
+    /** Position as a percentage, 0 = closed, 100 = open. */
+    fun getPercentage(): Int = ((value.toInt() and 0xff) * 100.0 / 255.0).roundToInt()
 
-    override fun printValue(): String = status.name
-
-    override fun update(newData: ByteArray, event: Boolean): Boolean {
-        val upIndex = subAddress.toInt()
-        val downIndex = upIndex + 1
-        if (downIndex >= newData.size) {
-            LOG.warn("Unexpected subaddress {} on {} ({})", subAddress, address, name)
-            return false
-        }
-        val newStatus = when (0xFF.toByte()) {
-            newData[upIndex] -> Status.UP
-            newData[downIndex] -> Status.DOWN
-            else -> Status.STOP
-        }
-        if (status == newStatus) {
-            return false
-        }
-        status = newStatus
-        return true
+    /** Set the position from a percentage (0 = closed, 100 = open). */
+    fun setPercentage(percentage: Int) {
+        value = (percentage.coerceIn(0, 100) * 255.0 / 100.0).roundToInt().toByte()
     }
 
     override fun update(newData: SdOutput): Boolean {
         if (newData is SdOutputShutter) {
-            if (status != newData.status) {
-                status = newData.status
+            if (value != newData.value) {
+                value = newData.value
                 return true
             }
         } else {
             LOG.warn("Invalid data type: {}", newData.javaClass)
         }
         return false
-    }
-
-    enum class Status(val value: Byte) {
-        STOP(0x00),
-        UP(0x01),
-        DOWN(0x02),
     }
 }
 

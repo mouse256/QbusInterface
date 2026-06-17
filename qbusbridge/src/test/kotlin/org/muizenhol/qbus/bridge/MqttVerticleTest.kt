@@ -216,44 +216,44 @@ class MqttVerticleTest() {
         }
     }
 
-    private fun mkShutter(serial: String, id: Int, status: SdOutputShutter.Status): MqttItemWrapper {
+    private fun mkShutter(serial: String, id: Int, percentage: Int): MqttItemWrapper {
         return MqttItemWrapper(
             serial,
             SdOutputShutter(id, "", 0x00, 0x00, -1, place, false).apply {
-                this.status = status
+                setPercentage(percentage)
             })
     }
 
     @Test
-    fun testShutterStateUp(vertx: Vertx, vertxContext: VertxTestContext) {
+    fun testShutterStateOpen(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/1/state", "opening")
-            val item = mkShutter("12345", 1, SdOutputShutter.Status.UP)
+            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/1/state", "100")
+            val item = mkShutter("12345", 1, 100)
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
 
     @Test
-    fun testShutterStateDown(vertx: Vertx, vertxContext: VertxTestContext) {
+    fun testShutterStateHalf(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/2/state", "closing")
-            val item = mkShutter("12345", 2, SdOutputShutter.Status.DOWN)
+            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/2/state", "50")
+            val item = mkShutter("12345", 2, 50)
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
 
     @Test
-    fun testShutterStateStop(vertx: Vertx, vertxContext: VertxTestContext) {
+    fun testShutterStateClosed(vertx: Vertx, vertxContext: VertxTestContext) {
         start(vertx, vertxContext) {
-            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/3/state", "stopped")
-            val item = mkShutter("12345", 3, SdOutputShutter.Status.STOP)
+            expectMqtt(vertxContext, "qbus/12345/sensor/shutter/3/state", "0")
+            val item = mkShutter("12345", 3, 0)
             send(vertx, vertxContext, item, MqttHandled.OK)
         }
     }
 
     @Test
     fun testShutterCommandOpen(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = mkShutter("12345", 1, SdOutputShutter.Status.UP)
+        val expected = mkShutter("12345", 1, 100)
         expectItem(vertx, vertxContext, expected)
         start(vertx, vertxContext) {
             mqttClient!!.publish(
@@ -265,7 +265,7 @@ class MqttVerticleTest() {
 
     @Test
     fun testShutterCommandClose(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = mkShutter("12345", 1, SdOutputShutter.Status.DOWN)
+        val expected = mkShutter("12345", 1, 0)
         expectItem(vertx, vertxContext, expected)
         start(vertx, vertxContext) {
             mqttClient!!.publish(
@@ -276,9 +276,24 @@ class MqttVerticleTest() {
     }
 
     @Test
-    fun testShutterCommandStop(vertx: Vertx, vertxContext: VertxTestContext) {
-        val expected = mkShutter("12345", 1, SdOutputShutter.Status.STOP)
+    fun testShutterCommandPosition(vertx: Vertx, vertxContext: VertxTestContext) {
+        val expected = mkShutter("12345", 1, 50)
         expectItem(vertx, vertxContext, expected)
+        start(vertx, vertxContext) {
+            mqttClient!!.publish(
+                "qbus/12345/sensor/shutter/1/command",
+                Buffer.buffer("50"), MqttQoS.AT_LEAST_ONCE, false, false
+            )
+        }
+    }
+
+    @Test
+    fun testShutterCommandStopIgnored(vertx: Vertx, vertxContext: VertxTestContext) {
+        val checkpoint = vertxContext.checkpoint()
+        vertx.setTimer(1000) { checkpoint.flag() }
+        vertx.eventBus().localConsumer(QbusVerticle.ADDRESS_UPDATE_QBUS_ITEM) { _: Message<MqttItemWrapper> ->
+            vertxContext.failNow(IllegalStateException("no data expected for STOP"))
+        }
         start(vertx, vertxContext) {
             mqttClient!!.publish(
                 "qbus/12345/sensor/shutter/1/command",

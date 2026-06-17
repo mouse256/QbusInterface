@@ -242,14 +242,14 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                     Cover.Builder()
                         .withName("shutter")
                         .withUniqueId(uuid)
+                        // Open/close buttons and the position slider share the command topic.
                         .withCommandTopic(commandTopic)
-                        .withStateTopic(stateTopic)
+                        .withSetPositionTopic(commandTopic)
+                        .withPositionTopic(stateTopic)
                         .withPayloadOpen(MqttType.SHUTTER_PAYLOAD_OPEN)
                         .withPayloadClose(MqttType.SHUTTER_PAYLOAD_CLOSE)
-                        .withPayloadStop(MqttType.SHUTTER_PAYLOAD_STOP)
-                        .withStateOpening(MqttType.SHUTTER_STATE_OPENING)
-                        .withStateClosing(MqttType.SHUTTER_STATE_CLOSING)
-                        .withStateStopped(MqttType.SHUTTER_STATE_STOPPED)
+                        .withPositionOpen(MqttType.SHUTTER_POSITION_OPEN)
+                        .withPositionClosed(MqttType.SHUTTER_POSITION_CLOSED)
                         .build(),
                     output.name,
                     "shutter"
@@ -329,9 +329,9 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             }
 
             is SdOutputShutter -> {
-                val state = shutterState(data.status)
-                publishTopic(item, state, "state")
-                state
+                val position = data.getPercentage().toString()
+                publishTopic(item, position, "state")
+                position
             }
 
             is SdOutputAudio -> {
@@ -419,7 +419,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
                 MqttType.SHUTTER ->
                     SdOutputShutter(id, "", 0x00, 0x00, -1, placeDummy, false).apply {
-                        status = convertPayloadShutter(payload) ?: return
+                        setPercentage(convertPayloadShutter(payload) ?: return)
                     }
 
                 MqttType.EVENT -> {
@@ -463,20 +463,26 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
         }
     }
 
-    private fun shutterState(status: SdOutputShutter.Status): String = when (status) {
-        SdOutputShutter.Status.UP -> MqttType.SHUTTER_STATE_OPENING
-        SdOutputShutter.Status.DOWN -> MqttType.SHUTTER_STATE_CLOSING
-        SdOutputShutter.Status.STOP -> MqttType.SHUTTER_STATE_STOPPED
-    }
-
-    private fun convertPayloadShutter(payload: String): SdOutputShutter.Status? {
-        return when (payload) {
-            MqttType.SHUTTER_PAYLOAD_OPEN -> SdOutputShutter.Status.UP
-            MqttType.SHUTTER_PAYLOAD_CLOSE -> SdOutputShutter.Status.DOWN
-            MqttType.SHUTTER_PAYLOAD_STOP -> SdOutputShutter.Status.STOP
-            else -> {
-                LOG.warn("Invalid shutter payload: {}", payload)
+    /**
+     * Translate a shutter command into a target position percentage (0 = closed, 100 = open).
+     * Accepts HomeAssistant (OPEN/CLOSE) and OpenHab (UP/DOWN) keywords as well as a bare 0-100
+     * position. STOP is not supported by the ROL02P protocol.
+     */
+    private fun convertPayloadShutter(payload: String): Int? {
+        return when (payload.uppercase()) {
+            MqttType.SHUTTER_PAYLOAD_OPEN, "UP" -> MqttType.SHUTTER_POSITION_OPEN
+            MqttType.SHUTTER_PAYLOAD_CLOSE, "DOWN" -> MqttType.SHUTTER_POSITION_CLOSED
+            "STOP" -> {
+                LOG.debug("Shutter stop is not supported by the controller, ignoring")
                 null
+            }
+
+            else -> {
+                val position = payload.toDoubleOrNull()?.toInt()?.takeIf { it in 0..100 }
+                if (position == null) {
+                    LOG.warn("Invalid shutter payload: {}", payload)
+                }
+                position
             }
         }
     }
