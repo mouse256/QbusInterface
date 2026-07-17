@@ -10,6 +10,7 @@ import io.vertx.mqtt.MqttClient
 import io.vertx.mqtt.MqttClientOptions
 import io.vertx.mqtt.messages.MqttPublishMessage
 import org.muizenhol.homeassistant.discovery.Discovery
+import org.muizenhol.homeassistant.discovery.StateClass
 import org.muizenhol.homeassistant.discovery.component.*
 import org.muizenhol.qbus.bridge.type.MqttHandled
 import org.muizenhol.qbus.bridge.type.MqttItemWrapper
@@ -196,61 +197,79 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             val commandTopic = "${topicPrefix}/command"
             val deviceWithMeta: ComponentWithMeta? = when (output) {
                 is SdOutputOnOff, is SdOutputTimer2, is SdOutputTimer -> ComponentWithMeta(
-                    Switch.Builder()
-                        .withName("relay")
-                        .withUniqueId(uuid)
-                        .withCommandTopic(commandTopic)
-                        .withStateTopic("${topicPrefix}/state")
-                        .withPayloadOn("255")
-                        .withPayloadOff("0")
-                        .build(),
+                    listOf(
+                        Switch.Builder()
+                            .withName("relay")
+                            .withUniqueId(uuid)
+                            .withCommandTopic(commandTopic)
+                            .withStateTopic("${topicPrefix}/state")
+                            .withPayloadOn("255")
+                            .withPayloadOff("0")
+                            .build()
+                    ),
                     output.name,
                     "relay"
                 )
 
                 is SdOutputDimmer -> ComponentWithMeta(
-                    Light.Builder()
-                        .withName("dimmer")
-                        .withUniqueId(uuid)
-                        .withCommandTopic(commandTopic)
-                        .withStateTopic("${topicPrefix}/actualState")
-                        .withPayloadOn("ON")
-                        .withPayloadOff("OFF")
-                        .withBrightnessScale(255)
-                        .withBrightnessStateTopic(stateTopic)
-                        .withBrightnessCommandTopic(commandTopic)
-                        .withOnCommandType("brightness")
-                        .build(),
+                    listOf(
+                        Light.Builder()
+                            .withName("dimmer")
+                            .withUniqueId(uuid)
+                            .withCommandTopic(commandTopic)
+                            .withStateTopic("${topicPrefix}/actualState")
+                            .withPayloadOn("ON")
+                            .withPayloadOff("OFF")
+                            .withBrightnessScale(255)
+                            .withBrightnessStateTopic(stateTopic)
+                            .withBrightnessCommandTopic(commandTopic)
+                            .withOnCommandType("brightness")
+                            .build(),
+                        // Separate sensor so HomeAssistant's recorder tracks the brightness level
+                        // (a light's brightness attribute is not kept in long-term statistics).
+                        Sensor.Builder()
+                            .withName("brightness")
+                            .withUniqueId("${uuid}-brightness")
+                            .withStateTopic(stateTopic)
+                            .withUnitOfMeasurement("%")
+                            .withStateClass(StateClass.MEASUREMENT)
+                            .withValueTemplate("{{ (value | float(0) / 255 * 100) | round(0) }}")
+                            .build()
+                    ),
                     output.name,
                     "dimmer"
                 )
 
                 is SdOutputThermostat -> ComponentWithMeta(
-                    Climate.Builder()
-                        .withName("thermostat")
-                        .withUniqueId(uuid)
-                        .withTempStep(0.5)
-                        .withModes(SdOutputThermostat.Mode.entries.map { m -> m.name }.toList())
-                        .withTemperatureStateTopic("${topicPrefix}/set")
-                        .withCurrentTemperatureTopic("${topicPrefix}/measured")
-                        .build(),
+                    listOf(
+                        Climate.Builder()
+                            .withName("thermostat")
+                            .withUniqueId(uuid)
+                            .withTempStep(0.5)
+                            .withModes(SdOutputThermostat.Mode.entries.map { m -> m.name }.toList())
+                            .withTemperatureStateTopic("${topicPrefix}/set")
+                            .withCurrentTemperatureTopic("${topicPrefix}/measured")
+                            .build()
+                    ),
                     output.name,
                     "thermostat"
                 )
 
                 is SdOutputShutter -> ComponentWithMeta(
-                    Cover.Builder()
-                        .withName("shutter")
-                        .withUniqueId(uuid)
-                        // Open/close buttons and the position slider share the command topic.
-                        .withCommandTopic(commandTopic)
-                        .withSetPositionTopic(commandTopic)
-                        .withPositionTopic(stateTopic)
-                        .withPayloadOpen(MqttType.SHUTTER_PAYLOAD_OPEN)
-                        .withPayloadClose(MqttType.SHUTTER_PAYLOAD_CLOSE)
-                        .withPositionOpen(MqttType.SHUTTER_POSITION_OPEN)
-                        .withPositionClosed(MqttType.SHUTTER_POSITION_CLOSED)
-                        .build(),
+                    listOf(
+                        Cover.Builder()
+                            .withName("shutter")
+                            .withUniqueId(uuid)
+                            // Open/close buttons and the position slider share the command topic.
+                            .withCommandTopic(commandTopic)
+                            .withSetPositionTopic(commandTopic)
+                            .withPositionTopic(stateTopic)
+                            .withPayloadOpen(MqttType.SHUTTER_PAYLOAD_OPEN)
+                            .withPayloadClose(MqttType.SHUTTER_PAYLOAD_CLOSE)
+                            .withPositionOpen(MqttType.SHUTTER_POSITION_OPEN)
+                            .withPositionClosed(MqttType.SHUTTER_POSITION_CLOSED)
+                            .build()
+                    ),
                     output.name,
                     "shutter"
                 )
@@ -262,10 +281,11 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
             }
 
             if (deviceWithMeta != null) {
-                val device = deviceWithMeta.comp
                 val serial = data.serialNumber
-                val id = "${serial}-${device.uniqueId}"
-                val comps = mapOf<String, Component>(device.uniqueId to device)
+                // The output's own uniqueId (uuid) identifies the device; extra components
+                // (e.g. a dimmer's brightness sensor) are grouped under the same device.
+                val id = "${serial}-${uuid}"
+                val comps = deviceWithMeta.comps.associateBy { it.uniqueId }
                 val discovery2 = Discovery(
                     Discovery.Device(
                         id,
@@ -282,7 +302,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
                 )
                 LOG.info("Publish discovery for ${id}")
                 publishQueued(
-                    "homeassistant/device/qbus-mqtt-${serial}/${device.uniqueId}/config",
+                    "homeassistant/device/qbus-mqtt-${serial}/${uuid}/config",
                     Buffer.buffer(OBJECT_MAPPER.writeValueAsBytes(discovery2)),
                     MqttQoS.AT_LEAST_ONCE,
                     false,
@@ -295,7 +315,7 @@ class MqttVerticle(val mqttHost: String, val mqttPort: Int) : AbstractVerticle()
 
     private val states = mutableMapOf<String, MutableMap<Int, State>>()
 
-    data class ComponentWithMeta(val comp: Component, val name: String, val type: String)
+    data class ComponentWithMeta(val comps: List<Component>, val name: String, val type: String)
     data class State(val type: String, val payload: String, val name: String, val place: String)
 
     private fun publish(item: MqttItemWrapper): MqttHandled {
