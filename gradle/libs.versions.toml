@@ -2,7 +2,7 @@
 kotlin = "2.4.21"
 quarkus = "3.40.1"
 kotlin-logging-jvm = "8.0.4"
-kotest = "6.2.5"
+kotest = "6.2.6"
 mockk = "3.1.0"
 mockito-kotlin = "6.4.0"
 kotlinx-coroutines-core = "1.11.0"
